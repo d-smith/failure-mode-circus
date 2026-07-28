@@ -1,0 +1,17 @@
+Failure Mode Circus — Progress Log
+
+Format: one entry per completed task from baseline-plan.md, dated, noting what was
+done and any deviations/decisions worth remembering.
+
+## 2026-07-28 — Task 1: .gitignore + directory skeleton
+
+Created .gitignore (Terraform state/.terraform, override files, Go build
+artifacts, .DS_Store). Note: *.tfvars is intentionally NOT ignored — the plan
+checks in terraform.tfvars for scenarios (task 19), and these files contain no
+secrets.
+
+Created the full directory skeleton from the Repo Layout section:
+.github/workflows, terraform/{bootstrap,modules/*,hub,scenarios/reference-service},
+services/reference-service, k6/scripts/reference-service, scripts, docs.
+Each currently-empty directory got a .gitkeep placeholder so git tracks the
+skeleton; these will be deleted as real files land in later tasks.

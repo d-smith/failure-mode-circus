@@ -67,10 +67,12 @@ failure-mode-circus/
 
 The user wants to direct execution task by task: after each task below, stop and show what changed, and get explicit go-ahead before starting the next one. Do not batch multiple tasks together unprompted. Track this list with TaskCreate/TaskUpdate, one task `in_progress` at a time.
 
+Progress tracking: as each task below is completed and confirmed, check it off here (`- [ ]` → `- [x]`) and append a dated entry to `progress.txt` at the repo root summarizing what was done and any notable decisions/deviations.
+
 ## Task List
 
 **Repo setup**
-- [ ] 1.Create `.gitignore` (Terraform state/`.terraform`, Go build artifacts, etc.), create the directory skeleton from the Repo Layout section (empty placeholder files/READMEs where needed).
+- [x] 1.Create `.gitignore` (Terraform state/`.terraform`, Go build artifacts, etc.), create the directory skeleton from the Repo Layout section (empty placeholder files/READMEs where needed).
 - [ ] 2. Create the GitHub repo `d-smith/failure-mode-circus` (or confirm it already exists) and push the initial scaffold.
 
 **State backend bootstrap**
