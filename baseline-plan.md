@@ -73,10 +73,10 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 
 **Repo setup**
 - [x] 1.Create `.gitignore` (Terraform state/`.terraform`, Go build artifacts, etc.), create the directory skeleton from the Repo Layout section (empty placeholder files/READMEs where needed).
-- [ ] 2. Create the GitHub repo `d-smith/failure-mode-circus` (or confirm it already exists) and push the initial scaffold.
+- [x] 2. Create the GitHub repo `d-smith/failure-mode-circus` (or confirm it already exists) and push the initial scaffold.
 
 **State backend bootstrap**
-- [ ] 3. Write `terraform/bootstrap/main.tf`: S3 state bucket (versioned, encrypted, public access blocked, TLS-only bucket policy) + DynamoDB lock table.
+- [x] 3. Write `terraform/bootstrap/main.tf`: S3 state bucket (versioned, encrypted, public access blocked, TLS-only bucket policy) + DynamoDB lock table.
 - [ ] 4. Write `terraform/bootstrap/oidc.tf`: GitHub OIDC provider for `token.actions.githubusercontent.com`.
 - [ ] 5. Manually `terraform init && terraform apply` the bootstrap module (local state) — one-time, not via CI. Record the resulting bucket name/table name/OIDC provider ARN for use in later steps.
 

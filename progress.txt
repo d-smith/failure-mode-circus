@@ -15,3 +15,47 @@ Created the full directory skeleton from the Repo Layout section:
 services/reference-service, k6/scripts/reference-service, scripts, docs.
 Each currently-empty directory got a .gitkeep placeholder so git tracks the
 skeleton; these will be deleted as real files land in later tasks.
+
+## 2026-07-28 — Task 2: GitHub repo + push initial scaffold
+
+Done by the user directly (not via this session): confirmed GitHub repo
+d-smith/failure-mode-circus, set `origin` to
+https://github.com/d-smith/failure-mode-circus.git, and pushed. Local repo now
+has origin configured and commit 1348c46 ("Initial directory structure and
+project set up") on top of ec57617 ("Initial commit"), working tree clean.
+
+## 2026-07-28 — Task 3: terraform/bootstrap/main.tf
+
+Wrote the bootstrap root module: aws_s3_bucket (name suffixed with account id
+for global uniqueness) + versioning + SSE-S3 (AES256) encryption + public
+access block, aws_s3_bucket_policy denying any request where
+aws:SecureTransport is false (TLS-only), and an aws_dynamodb_table lock table
+(PAY_PER_REQUEST, hash key LockID). Added outputs for state_bucket_name and
+lock_table_name so their values can be read after apply (task 5). Region
+hardcoded to us-east-1 per the locked-in decision; provider version pinned to
+~> 5.0 aws, required_version >= 1.5.
+
+Removed the now-redundant terraform/bootstrap/.gitkeep since the directory has
+a real file.
+
+Caveat: terraform CLI is not installed in this environment, so `terraform fmt`
+/ `terraform validate` could not be run to self-check. Reviewed the HCL by eye
+for correctness and alignment instead; recommend running `terraform validate`
+before the manual apply in task 5.
+
+## 2026-07-28 — Ad hoc: README.md tooling prerequisites
+
+Not a numbered baseline-plan task, but requested alongside it. Added
+README.md at repo root listing required tooling (Terraform >= 1.5, AWS CLI v2,
+Docker, Go, gh, git) and optional tooling (jq, k6 CLI), each with why it's
+needed and an install link, plus non-software prerequisites (AWS account/
+credentials, GitHub access).
+
+Ran a gap check on this dev machine against that list: Terraform and gh are
+missing (Terraform is a real blocker for tasks 5/17/21; gh is optional since
+the user handles all git/GitHub actions themselves). aws, docker, git, jq
+present and adequate. Go was 1.21.6 — out of Go's two-release support window
+(current stable is 1.26.x, previous 1.25.x). User is upgrading Go locally;
+updated the README's Go row to say "latest stable (currently 1.26.x)" instead
+of a hardcoded floor, since Go's own support policy makes a fixed version
+number go stale.
