@@ -76,3 +76,26 @@ with background sources (GitHub's official OIDC-with-AWS doc, aws-actions/
 configure-aws-credentials, Cloud Posse's OIDC flow writeup, a Terraform-specific
 walkthrough, and a note on trust-policy scoping via the `sub` claim) — useful
 context for building terraform/modules/github-oidc-role/ later.
+
+Caught a bug during review: the first GitHub OIDC thumbprint in oidc.tf was
+missing its last hex character (39 chars instead of 40), which surfaced as a
+terraform apply error ("expected length of thumbprint_list.0 to be in the
+range (40 - 40)"). Fixed to the correct 40-char value
+(6938fd4d98bab03faadb97b34396831e3780aea1).
+
+## 2026-07-29 — Task 5: terraform init && terraform apply (bootstrap)
+
+Ran manually by the user using AWS SSO credentials (AWS_PROFILE env var, no
+profile hardcoded into main.tf). `terraform apply` completed with "Apply
+complete! Resources: 7 added, 0 changed, 0 destroyed" (S3 bucket + versioning
++ encryption config + public access block + bucket policy + DynamoDB table +
+OIDC provider — matches the 7 resources defined across main.tf/oidc.tf).
+
+Recorded outputs for use in later hub/backend config:
+- state_bucket_name  = failure-mode-circus-tfstate-427848627088
+- lock_table_name    = failure-mode-circus-tflock
+- github_oidc_provider_arn = arn:aws:iam::427848627088:oidc-provider/token.actions.githubusercontent.com
+
+Local terraform.tfstate for bootstrap now exists under terraform/bootstrap/
+(gitignored, as intended — this is the one root module that stays local,
+never a CI-applied remote backend).

@@ -78,7 +78,7 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 **State backend bootstrap**
 - [x] 3. Write `terraform/bootstrap/main.tf`: S3 state bucket (versioned, encrypted, public access blocked, TLS-only bucket policy) + DynamoDB lock table.
 - [x] 4. Write `terraform/bootstrap/oidc.tf`: GitHub OIDC provider for `token.actions.githubusercontent.com`.
-- [ ] 5. Manually `terraform init && terraform apply` the bootstrap module (local state) — one-time, not via CI. Record the resulting bucket name/table name/OIDC provider ARN for use in later steps.
+- [x] 5. Manually `terraform init && terraform apply` the bootstrap module (local state) — one-time, not via CI. Record the resulting bucket name/table name/OIDC provider ARN for use in later steps.
 
 **Shared Terraform modules (one task each)**
 - [ ] 6. `terraform/modules/networking`: VPC, 2 private subnets across AZs, route tables, VPC interface endpoints (ecr.api, ecr.dkr, logs) + S3 gateway endpoint, no NAT by default.
