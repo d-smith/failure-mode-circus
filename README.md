@@ -28,3 +28,20 @@ build plan and `progress.txt` for what's been done so far.
 - An AWS account in which to create the `us-east-1` resources described in `baseline-plan.md`.
 - Local AWS credentials configured (`aws configure`, environment variables, or an SSO profile) with permissions sufficient for the one-time manual applies of `terraform/bootstrap` and `terraform/hub`.
 - A GitHub account with rights to create/push to `d-smith/failure-mode-circus`.
+
+## Appendix: GitHub Actions OIDC / AWS references
+
+Background reading for the OIDC trust setup in `terraform/bootstrap/oidc.tf` and the
+per-purpose roles it will support (`terraform/modules/github-oidc-role/`).
+
+**Official docs**
+- [GitHub Docs — Configuring OpenID Connect in Amazon Web Services](https://docs.github.com/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) — canonical walkthrough: workflow `id-token: write` permission, trusting GitHub's provider in AWS, and scoping the IAM trust policy on the `sub` claim (repo/branch).
+- [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) — the official GitHub Action that exchanges the OIDC token for temporary AWS credentials via `sts:AssumeRoleWithWebIdentity`.
+
+**Terraform-specific**
+- [Cloud Posse — How GitHub OIDC Works with AWS](https://docs.cloudposse.com/layers/github-actions/github-oidc-with-aws/) — conceptual diagram of the token flow, mapped to Terraform resources.
+- [Xebia — Deploy Terraform to AWS with GitHub Actions using OIDC](https://xebia.com/blog/how-to-deploy-terraform-to-aws-with-github-actions-authenticated-with-openid-connect/) — closest match to this repo's use case (Terraform apply via an OIDC-assumed role).
+- [Colin Barker — GitHub Actions and OIDC Update for Terraform and AWS (2025)](https://colinbarker.me.uk/blog/2025-01-12-github-actions-oidc-update/) — explains why AWS now validates against its trusted CA store rather than strictly matching the thumbprint, relevant to the thumbprint comment in `oidc.tf`.
+
+**On scoping the trust policy** (relevant to the future `github-oidc-role` module)
+- Condition the role trust policy on `token.actions.githubusercontent.com:sub` (e.g. `repo:d-smith/failure-mode-circus:ref:refs/heads/main`) so only specific repo/branch workflows can assume the role — see the GitHub doc above.
