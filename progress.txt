@@ -59,3 +59,20 @@ present and adequate. Go was 1.21.6 — out of Go's two-release support window
 updated the README's Go row to say "latest stable (currently 1.26.x)" instead
 of a hardcoded floor, since Go's own support policy makes a fixed version
 number go stale.
+
+## 2026-07-29 — Task 4: terraform/bootstrap/oidc.tf
+
+Wrote the GitHub Actions OIDC provider resource (aws_iam_openid_connect_provider)
+for token.actions.githubusercontent.com, audience sts.amazonaws.com, with both
+the current and prior GitHub intermediate-CA thumbprints listed (AWS validates
+against its own trusted CA store for this provider now, but the argument is
+still required). Added output github_oidc_provider_arn for later github-oidc-role
+module instantiations (task 10) to reference. Ran `terraform fmt -check -diff`
+scoped to oidc.tf only — clean (a pre-existing formatting drift was found in
+main.tf, left untouched since it's out of scope for this task).
+
+Ad hoc: added a "GitHub Actions OIDC / AWS references" appendix to README.md
+with background sources (GitHub's official OIDC-with-AWS doc, aws-actions/
+configure-aws-credentials, Cloud Posse's OIDC flow writeup, a Terraform-specific
+walkthrough, and a note on trust-policy scoping via the `sub` claim) — useful
+context for building terraform/modules/github-oidc-role/ later.
