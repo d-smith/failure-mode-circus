@@ -99,3 +99,60 @@ Recorded outputs for use in later hub/backend config:
 Local terraform.tfstate for bootstrap now exists under terraform/bootstrap/
 (gitignored, as intended — this is the one root module that stays local,
 never a CI-applied remote backend).
+
+## 2026-07-29 — Task 6: terraform/modules/networking
+
+Wrote the shared networking module (no provider/backend block — it's a
+reusable module, only ever composed into a root module like hub):
+
+- main.tf: aws_vpc (DNS support/hostnames enabled, required for interface
+  endpoint private DNS), 2 private subnets placed across the first N
+  available AZs (data.aws_availability_zones, N = length of
+  var.private_subnet_cidrs, default 2), a single shared private route table
+  (no NAT route — only the implicit local route plus the S3 gateway endpoint
+  route added in endpoints.tf) and its subnet associations.
+- endpoints.tf: a security group for interface VPC endpoints (ingress 443
+  from the VPC CIDR, no egress needed since endpoint ENIs don't initiate
+  connections), interface endpoints for ecr.api/ecr.dkr/logs (for_each-driven,
+  private_dns_enabled), and the free S3 gateway endpoint attached to the
+  private route table.
+- variables.tf / outputs.tf / versions.tf: name_prefix, vpc_cidr (default
+  10.0.0.0/16), private_subnet_cidrs (default two /24s), tags map; outputs
+  expose vpc_id, vpc_cidr_block, private_subnet_ids, availability_zones,
+  private_route_table_id, and vpc_endpoints_security_group_id for later
+  modules/hub to consume.
+
+Removed the now-redundant terraform/modules/networking/.gitkeep.
+
+User ran `terraform init -backend=false` (succeeded) and `terraform validate`
+(configuration valid) directly rather than Claude running them via Bash —
+going forward in this project, Claude gives the terraform command + a short
+explanation and the user runs it themselves, reporting back the result.
+
+## 2026-07-29 — Task 7: terraform/modules/ecs-cluster
+
+Wrote the shared ecs-cluster module (no provider/backend block, composed
+later by hub):
+
+- main.tf: aws_service_discovery_private_dns_namespace (default name
+  "internal", associated with var.vpc_id from the networking module) plus
+  aws_ecs_cluster with that namespace set as its service_connect_defaults
+  namespace — this is what gives Service Connect-enabled services DNS names
+  like reference-service.internal per the plan's key design decisions.
+- Deliberately left out: capacity-provider association
+  (aws_ecs_cluster_capacity_providers) and any execute_command_configuration
+  block — services/tasks will just set launch_type = "FARGATE" directly in
+  later modules (ecs-service, ecs-task-oneshot), which doesn't require
+  capacity providers to be associated with the cluster, and ECS Exec wasn't
+  asked for anywhere in the plan.
+- Container Insights defaults to disabled (enable_container_insights = false)
+  to avoid extra CloudWatch cost on infra that's meant to be idle most of the
+  time; can be opted into per-scenario later.
+- outputs.tf exposes cluster_arn, cluster_name, cloudmap_namespace_id,
+  cloudmap_namespace_arn — cluster_arn and cloudmap_namespace_id match the
+  exact names called out as hub's stable-outputs contract in the plan.
+
+Removed the now-redundant terraform/modules/ecs-cluster/.gitkeep.
+
+User ran `terraform init -backend=false` (succeeded) and `terraform validate`
+(configuration valid) themselves, same as task 6.

@@ -81,8 +81,8 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 - [x] 5. Manually `terraform init && terraform apply` the bootstrap module (local state) — one-time, not via CI. Record the resulting bucket name/table name/OIDC provider ARN for use in later steps.
 
 **Shared Terraform modules (one task each)**
-- [ ] 6. `terraform/modules/networking`: VPC, 2 private subnets across AZs, route tables, VPC interface endpoints (ecr.api, ecr.dkr, logs) + S3 gateway endpoint, no NAT by default.
-- [ ] 7. `terraform/modules/ecs-cluster`: Fargate cluster + Cloud Map/Service Connect namespace.
+- [x] 6. `terraform/modules/networking`: VPC, 2 private subnets across AZs, route tables, VPC interface endpoints (ecr.api, ecr.dkr, logs) + S3 gateway endpoint, no NAT by default.
+- [x] 7. `terraform/modules/ecs-cluster`: Fargate cluster + Cloud Map/Service Connect namespace.
 - [ ] 8. `terraform/modules/logging`: CloudWatch log group factory with naming convention and short retention.
 - [ ] 9. `terraform/modules/iam-task-roles`: shared task execution role + per-scenario task role factory.
 - [ ] 10. `terraform/modules/github-oidc-role`: scoped IAM roles assumable via the OIDC provider, parameterized by repo/branch/purpose.
