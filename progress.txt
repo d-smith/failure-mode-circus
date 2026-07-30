@@ -200,3 +200,119 @@ Removed the now-redundant terraform/modules/iam-task-roles/.gitkeep.
 
 User ran `terraform init -backend=false` and `terraform validate` themselves
 — both succeeded.
+
+## 2026-07-29 — Task 10: terraform/modules/github-oidc-role
+
+Wrote the github-oidc-role module as a one-role-per-instantiation factory
+(hub will call it twice in task 15: once for terraform-apply, once for
+build-and-push/deploy). Deliberately does NOT hardcode any permissions
+itself — var.policy_arns (managed policy ARNs) and var.inline_policy_json
+(a caller-supplied aws_iam_policy_document JSON string) are how each purpose
+gets its own scoped permission set, matching the plan's requirement that
+terraform-apply be broad and build-and-push/deploy be narrow (ECR push + ECS
+RegisterTaskDefinition/UpdateService only).
+
+Trust policy: sts:AssumeRoleWithWebIdentity from the Federated OIDC provider
+(var.oidc_provider_arn, sourced from bootstrap's github_oidc_provider_arn
+output), conditioned on aud = sts.amazonaws.com and sub matching
+repo:<github_repo>:ref:refs/heads/<github_branch> (StringLike, so a caller
+can pass a wildcard branch pattern if ever needed) plus, if
+allow_pull_requests = true, also repo:<github_repo>:pull_request — for
+plan-only roles that PR-triggered workflows need to assume regardless of
+branch.
+
+Removed the now-redundant terraform/modules/github-oidc-role/.gitkeep.
+
+User ran `terraform init -backend=false` and `terraform validate` themselves
+— both succeeded.
+
+## 2026-07-29 — Task 11: terraform/modules/ecr-repo
+
+Wrote the ecr-repo module: one aws_ecr_repository per instantiation (hub will
+for_each this over "reference-service" and "k6-runner" in task 15), named
+"<name_prefix>/<repo_name>". image_tag_mutability defaults to MUTABLE
+(pragmatic for an early-stage project likely re-pushing tags like "latest"
+during iteration; exposed as a variable with validation against
+MUTABLE/IMMUTABLE in case a later scenario wants immutability).
+scan_on_push defaults to true (free basic scanning).
+
+A lifecycle policy is always attached, not optional: two rules built via
+jsonencode from max_image_count (default 10, keep only the last N tagged
+images via tagPatternList = ["*"] so it's not tied to any particular tagging
+scheme) and untagged_expire_days (default 3, untagged images accumulate fast
+from repeated dev pushes). lifecycle_policy_json lets a caller fully override
+with raw JSON if a scenario ever needs different rules.
+
+Removed the now-redundant terraform/modules/ecr-repo/.gitkeep.
+
+User ran `terraform init -backend=false` and `terraform validate` themselves
+— both succeeded.
+
+## 2026-07-29 — Task 12: terraform/modules/ecs-service
+
+Wrote the generic ecs-service module, split across main.tf (task definition +
+aws_ecs_service), security.tf (the service's own security group), plus the
+usual variables/outputs/versions:
+
+- var.containers is a list(object(...)) per the plan's explicit design
+  decision (accept a list from day one, not a single image/port pair) —
+  rendered into container_definitions JSON via a locals block, one awslogs
+  logConfiguration per container pointed at var.log_group_name with
+  awslogs-stream-prefix = container name.
+- Service Connect is a generic passthrough surface, not opinionated about
+  naming: var.service_connect_services is a list of {port_name,
+  discovery_name, client_port?} that the module wires directly into the
+  aws_ecs_service service_connect_configuration's dynamic "service" blocks.
+  The module doesn't hardcode "reference-service.internal" anywhere — the
+  reference-service scenario (task 19) will pass discovery_name =
+  "reference-service" itself. enable_service_connect defaults to true even
+  with an empty services list, so a task can be a Service Connect client
+  without exposing anything itself.
+- Task-level execution_role_arn/task_role_arn are required inputs (created
+  elsewhere, by iam-task-roles) — this module doesn't create IAM roles.
+- security.tf creates one SG per service: ingress on every distinct
+  container port from var.vpc_cidr only (matches the project's existing
+  VPC-endpoint SG pattern, no public exposure), egress all (needed to reach
+  ECR/logs VPC endpoints). assign_public_ip is hardcoded false in the network
+  configuration, not exposed as a variable, since public ingress was
+  explicitly deferred to a future opt-in ALB module per the plan.
+- extra_security_group_ids lets a caller attach additional SGs beyond the
+  one this module creates, for scenarios that need to reach something more
+  specific later.
+
+Removed the now-redundant terraform/modules/ecs-service/.gitkeep. Ran
+`terraform fmt` (not just -check) once to fix alignment in main.tf/
+variables.tf before validating — purely cosmetic, no semantic change.
+
+User ran `terraform init -backend=false` and `terraform validate` themselves
+— both succeeded.
+
+## 2026-07-29 — Task 13: terraform/modules/ecs-task-oneshot
+
+Wrote the ecs-task-oneshot module: task definition only, no aws_ecs_service.
+Reuses the same containers object shape and container_definitions rendering
+logic as ecs-service (duplicated rather than shared across modules, kept
+each module self-contained). Deliberately does NOT create network_configuration
+or a Service Connect client config — those are RunTask-invocation-time
+parameters (network placement, security groups, and any Service Connect
+client config are passed on the `aws ecs run-task` call itself, not stored
+in the task definition), so that's deferred to run-k6-task.yml (task 26).
+
+security.tf creates an egress-only security group (no ingress rules at all,
+unlike ecs-service) since a oneshot runner task like k6 only makes outbound
+calls, never accepts inbound connections.
+
+outputs.tf exposes task_definition_arn, task_definition_family (for
+`--task-definition`), and security_group_id for the future run-task
+workflow's network configuration.
+
+Removed the now-redundant terraform/modules/ecs-task-oneshot/.gitkeep. Ran
+`terraform fmt` (not just -check) once to fix a stray alignment space in
+variables.tf before validating — cosmetic only.
+
+User ran `terraform init -backend=false` and `terraform validate` themselves
+— both succeeded.
+
+This completes the "Shared Terraform modules" section (tasks 6-13). Next up
+is the Hub section (tasks 14-17), which composes these modules into the
+first real applied root module beyond bootstrap.

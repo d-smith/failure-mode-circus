@@ -85,10 +85,10 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 - [x] 7. `terraform/modules/ecs-cluster`: Fargate cluster + Cloud Map/Service Connect namespace.
 - [x] 8. `terraform/modules/logging`: CloudWatch log group factory with naming convention and short retention.
 - [x] 9. `terraform/modules/iam-task-roles`: shared task execution role + per-scenario task role factory.
-- [ ] 10. `terraform/modules/github-oidc-role`: scoped IAM roles assumable via the OIDC provider, parameterized by repo/branch/purpose.
-- [ ] 11. `terraform/modules/ecr-repo`: single ECR repo module with lifecycle policy.
-- [ ] 12. `terraform/modules/ecs-service`: generic service module accepting a list of container definitions + Service Connect config.
-- [ ] 13. `terraform/modules/ecs-task-oneshot`: generic run-once Fargate task definition module (used later by the k6 runner).
+- [x] 10. `terraform/modules/github-oidc-role`: scoped IAM roles assumable via the OIDC provider, parameterized by repo/branch/purpose.
+- [x] 11. `terraform/modules/ecr-repo`: single ECR repo module with lifecycle policy.
+- [x] 12. `terraform/modules/ecs-service`: generic service module accepting a list of container definitions + Service Connect config.
+- [x] 13. `terraform/modules/ecs-task-oneshot`: generic run-once Fargate task definition module (used later by the k6 runner).
 
 **Hub**
 - [ ] 14. Write `terraform/hub/main.tf` + `backend.tf` composing networking + ecs-cluster + logging, backend pointed at the bootstrap S3/DynamoDB.
