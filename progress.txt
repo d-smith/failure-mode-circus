@@ -316,3 +316,32 @@ User ran `terraform init -backend=false` and `terraform validate` themselves
 This completes the "Shared Terraform modules" section (tasks 6-13). Next up
 is the Hub section (tasks 14-17), which composes these modules into the
 first real applied root module beyond bootstrap.
+
+## 2026-07-29 — Task 14: terraform/hub/main.tf + backend.tf
+
+Wrote the first three files of the hub root module:
+
+- backend.tf: S3 backend pointed at the literal bucket/table names recorded
+  from task 5's bootstrap apply (bucket
+  failure-mode-circus-tfstate-427848627088, dynamodb_table
+  failure-mode-circus-tflock, both in us-east-1); backend blocks can't use
+  variables/interpolation so these are hardcoded, as expected. State key is
+  "hub/terraform.tfstate", establishing the convention that each scenario
+  gets its own key later (e.g. "scenarios/reference-service/terraform.tfstate").
+- variables.tf: name_prefix (default "failure-mode-circus"), log_group_names
+  (set(string), default ["reference-service", "k6-runner"] — passed straight
+  through to the logging module), and a tags map (Project/ManagedBy).
+- main.tf: required_providers/provider blocks (same aws ~> 5.0 pin as every
+  other module), then three module blocks composing networking, ecs-cluster,
+  and logging — ecs_cluster's vpc_id comes from module.networking.vpc_id,
+  demonstrating the modules actually wire together, not just independently
+  valid.
+
+outputs.tf is deliberately deferred to task 16 per the plan's own task
+breakdown; hub isn't yet composing ecr or oidc either (task 15).
+
+Removed the now-redundant terraform/hub/.gitkeep.
+
+User ran `terraform init -backend=false` (skips real backend init on
+purpose — this is a syntax/composition check only, not yet the real apply
+which is task 17) and `terraform validate` themselves — both succeeded.
