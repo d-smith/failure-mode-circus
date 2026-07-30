@@ -156,3 +156,47 @@ Removed the now-redundant terraform/modules/ecs-cluster/.gitkeep.
 
 User ran `terraform init -backend=false` (succeeded) and `terraform validate`
 (configuration valid) themselves, same as task 6.
+
+## 2026-07-29 — Task 8: terraform/modules/logging
+
+Wrote the shared logging module as a factory: var.log_group_names (set(string),
+no default — caller supplies logical names like ["reference-service",
+"k6-runner"]) drives a for_each aws_cloudwatch_log_group, one per name, named
+/ecs/<name_prefix>/<name>. retention_in_days defaults to 7 (short, matching
+the project's cost-conscious stance) with a validation block restricting it
+to the exact set of values CloudWatch Logs accepts. Outputs are maps of
+logical name -> log group name/ARN so callers can look up the right one per
+container.
+
+Removed the now-redundant terraform/modules/logging/.gitkeep.
+
+User ran `terraform init -backend=false` and `terraform validate` themselves
+— both succeeded.
+
+## 2026-07-29 — Task 9: terraform/modules/iam-task-roles
+
+Wrote the shared iam-task-roles module, covering both halves of the plan's
+design decision (line 59):
+
+- Shared execution role: aws_iam_role.execution created only when
+  var.create_execution_role = true (default true), trust policy scoped to
+  ecs-tasks.amazonaws.com, AmazonECSTaskExecutionRolePolicy attached. Meant to
+  be instantiated once, in the hub, and referenced by scenarios rather than
+  recreated per-scenario — the boolean toggle exists so a scenario root
+  module can call this same module for just its task role without a second
+  execution role being created.
+- Per-scenario task role factory: aws_iam_role.task for_each over
+  var.task_roles (map keyed by logical scenario name, e.g.
+  "reference-service"), each with the same ecs-tasks.amazonaws.com trust
+  policy plus whatever managed_policy_arns that scenario lists (empty by
+  default, matching "reference service needs ~none"). Attachments are built
+  via a flattened map (merge(...) over a list of per-role maps) so a scenario
+  needing e.g. SQS access later just adds an ARN to its task_roles entry.
+
+outputs.tf exposes execution_role_arn/name (null when
+create_execution_role = false) and task_role_arns/names maps.
+
+Removed the now-redundant terraform/modules/iam-task-roles/.gitkeep.
+
+User ran `terraform init -backend=false` and `terraform validate` themselves
+— both succeeded.
