@@ -45,3 +45,13 @@ output "execution_role_arn" {
   description = "ARN of the shared ECS task execution role, used by every scenario's ecs-service / ecs-task-oneshot task definitions."
   value       = module.task_roles.execution_role_arn
 }
+
+output "log_group_names" {
+  description = "Map of logical name -> full CloudWatch log group name, one entry per var.log_group_names."
+  value       = module.logging.log_group_names
+}
+
+output "log_group_arns" {
+  description = "Map of logical name -> log group ARN, one entry per var.log_group_names."
+  value       = module.logging.log_group_arns
+}

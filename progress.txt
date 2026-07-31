@@ -501,3 +501,62 @@ changed, 0 destroyed."
 
 Hub's outputs.tf now exposes 9 values total (added execution_role_arn to
 the 8 from task 16).
+
+## 2026-07-31 — Task 19: terraform/scenarios/reference-service/
+
+First scenario root module (first "spoke"). Before writing, asked the user
+whether iam.tf should create its own GitHub OIDC role (the plan's task
+wording literally says "scenario task role + github-oidc-role
+instantiation") or reuse hub's shared, repo/branch-scoped
+oidc_terraform_apply / oidc_build_and_push roles. User chose reuse hub's
+roles - simpler, no new IAM surface per scenario, matches "no shared module
+or hub resource needs editing" when adding scenario #2 later. So iam.tf
+here only creates the per-scenario task role.
+
+While wiring service.tf, discovered hub's outputs.tf was also missing
+log_group_names/log_group_arns (needed for ecs-service's required
+log_group_name input) - fixed by adding both outputs to hub/outputs.tf
+(same append-only pattern as execution_role_arn) and re-applying hub
+(0 added/changed/destroyed, output-only state update).
+
+Files written:
+- backend.tf: S3 backend, key "scenarios/reference-service/terraform.tfstate"
+  (own state file, separate from hub's, per the hub/spoke design).
+- variables.tf: name_prefix/tags mirroring hub's, hub_state_bucket/
+  hub_state_key/aws_region (defaults matching hub's actual backend, but
+  overridable, unlike backend.tf's hardcoded literals since these feed a
+  data source, not a backend block), image_tag (default "latest"),
+  container_port (default 8080), desired_count (default 1).
+- main.tf: provider aws (region = var.aws_region) + data
+  "terraform_remote_state" "hub" reading hub's S3 state directly (no
+  module wrapper - this is the one place a scenario couples to hub).
+- iam.tf: module "task_role" (iam-task-roles) with create_execution_role =
+  false and a single task_roles entry ("reference-service", empty
+  managed_policy_arns - needs ~none per the plan).
+- service.tf: module "reference_service" (ecs-service) wired entirely from
+  hub remote-state outputs (vpc_id, vpc_cidr_block, private_subnet_ids,
+  cluster_arn, execution_role_arn, log_group_names["reference-service"],
+  ecr_repository_urls["reference-service"]) plus the scenario's own task
+  role. One container definition, port_mappings named "http", exposed via
+  service_connect_services with discovery_name = "reference-service" ->
+  DNS name reference-service.internal per the plan's Service Connect
+  design decision.
+- outputs.tf: service_name, task_definition_arn, security_group_id.
+- terraform.tfvars: image_tag = "latest" (explicit per the plan's file
+  list, though it matches the variable's own default).
+
+Removed the now-redundant terraform/scenarios/reference-service/.gitkeep.
+Ran `terraform fmt` (not just -check) once to fix an alignment issue in
+service.tf before validating - cosmetic only.
+
+Flagged to the user (not yet acted on - relevant to task 21, not this one):
+the ECR repo has no reference-service:latest image pushed yet, since
+build-and-push CI doesn't exist until tasks 23-28. Applying this scenario
+before an image exists would leave the ECS service stuck failing to pull a
+nonexistent image - a manual docker build/tag/push to ECR will be needed
+before task 21's apply.
+
+User ran, in order: `terraform plan` + `terraform apply` on hub (0 added, 0
+changed, 0 destroyed - output-only change), then `terraform init` (real
+backend, first time for this root module) + `terraform validate` on the
+scenario module - all succeeded.
