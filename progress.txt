@@ -345,3 +345,77 @@ Removed the now-redundant terraform/hub/.gitkeep.
 User ran `terraform init -backend=false` (skips real backend init on
 purpose — this is a syntax/composition check only, not yet the real apply
 which is task 17) and `terraform validate` themselves — both succeeded.
+
+## 2026-07-29 — Task 15: terraform/hub/ecr.tf + oidc.tf
+
+Added ecr_repo_names (set(string), no default) and github_repo (default
+"d-smith/failure-mode-circus") to hub/variables.tf, plus a new
+hub/terraform.tfvars with ecr_repo_names = ["reference-service",
+"k6-runner"] — literally "for_each over a tfvars list" per the plan's
+wording, rather than a variable default, so adding scenario #2's image is a
+one-line tfvars edit.
+
+ecr.tf: module "ecr" for_each's the ecr-repo module over var.ecr_repo_names.
+
+oidc.tf: asked the user how strictly to scope the two OIDC roles' IAM
+policies (AdministratorAccess vs. custom scoped) since the plan only says
+"broad" for terraform-apply without specifying a policy, and this is a
+real security/effort trade-off. User chose custom scoped for both roles
+(accepting the trade-off that new permissions may need adding later as more
+modules/scenarios are built), so:
+
+- data "aws_iam_openid_connect_provider" "github" looks up the OIDC provider
+  bootstrap created (by its known URL) rather than coupling hub to
+  bootstrap's local state file, which CI runners wouldn't have access to
+  anyway.
+- terraform-apply role (broad-but-scoped, via inline_policy_json): ec2:*,
+  ecs:*, servicediscovery:* all on "*" (these services don't support useful
+  resource-level scoping for the actions this project needs — VPC/subnet/
+  route-table/endpoint/cluster/task-def/namespace management); ecr:* and
+  logs:* scoped to this project's repo/log-group naming prefix;
+  iam:Get*/List* account-wide (read-only, low risk) plus role/policy
+  write + PassRole scoped to arn:aws:iam::<account>:role/failure-mode-circus-*
+  only, plus read-only on the specific GitHub OIDC provider ARN; s3/dynamodb
+  scoped to the exact bootstrap-created state bucket and lock table ARNs.
+  Not AdministratorAccess — can't touch unrelated AWS services or IAM/roles
+  outside this project's naming convention.
+- build-and-push/deploy role (narrow, via inline_policy_json): ECR push
+  actions scoped to this project's repos; ecs:RegisterTaskDefinition/
+  DescribeTaskDefinition/UpdateService/DescribeServices/DescribeTasks plus
+  RunTask/StopTask/ListTasks (this same "day-to-day" role also covers the
+  future run-k6-task.yml workflow, per the plan's phrasing that this role is
+  for "day-to-day workflow steps" broadly, not just build-and-push
+  specifically); iam:PassRole scoped to this project's role prefix,
+  conditioned on iam:PassedToService = ecs-tasks.amazonaws.com. No IAM
+  role/policy write, no EC2/VPC actions.
+- Both roles instantiated via the github-oidc-role module: terraform-apply
+  trusts main branch + pull_request (terraform-hub.yml plans on PR, applies
+  on merge); build-and-push trusts main branch only.
+
+User ran `terraform init -backend=false` and `terraform validate` themselves
+— both succeeded.
+
+## 2026-07-31 — Task 16: terraform/hub/outputs.tf
+
+Wrote hub's outputs.tf as the stable contract scenario root modules will read
+via terraform_remote_state (task 19+). Includes the plan's literal 5
+(vpc_id, private_subnet_ids, cluster_arn, cloudmap_namespace_id,
+ecr_repository_urls) plus three additions flagged to and accepted by the
+user before writing:
+
+- vpc_cidr_block: needed by ecs-service/ecs-task-oneshot security groups,
+  which take var.vpc_cidr as a required input for ingress scoping — without
+  this output, every scenario would have to hardcode or re-derive the CIDR.
+- oidc_terraform_apply_role_arn and oidc_build_and_push_role_arn: will be
+  needed shortly for the CI workflow YAML files' role-to-assume fields
+  (tasks 23-27); exposing them now avoids a later edit to this "only add,
+  never rename/remove" contract file.
+
+A header comment states the stable-contract rule directly in the file, not
+just in baseline-plan.md/docs/architecture.md.
+
+ecr_repository_urls is a map (logical image name -> repo URL) built via a
+for-expression over module.ecr, matching ecr.tf's for_each keying.
+
+User ran `terraform init -backend=false` and `terraform validate` themselves
+— both succeeded.

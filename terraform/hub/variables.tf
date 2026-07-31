@@ -18,3 +18,14 @@ variable "tags" {
     ManagedBy = "terraform"
   }
 }
+
+variable "ecr_repo_names" {
+  description = "Names of ECR repositories to create, one per container image the pipeline builds/pushes. for_each-driven off this list (see terraform.tfvars) so adding a new scenario's image is a one-line addition."
+  type        = set(string)
+}
+
+variable "github_repo" {
+  description = "GitHub repo (owner/name) the OIDC-trusted roles trust."
+  type        = string
+  default     = "d-smith/failure-mode-circus"
+}

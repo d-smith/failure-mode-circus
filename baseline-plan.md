@@ -92,8 +92,8 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 
 **Hub**
 - [x] 14. Write `terraform/hub/main.tf` + `backend.tf` composing networking + ecs-cluster + logging, backend pointed at the bootstrap S3/DynamoDB.
-- [ ] 15. Write `terraform/hub/ecr.tf` (ECR repos for `reference-service` and `k6-runner` images, `for_each` over a tfvars list) and `terraform/hub/oidc.tf` (hub-scoped `terraform-apply` and `build-and-push`/`deploy` roles).
-- [ ] 16. Write `terraform/hub/outputs.tf` (vpc_id, private_subnet_ids, cluster_arn, cloudmap_namespace_id, ecr repo URLs) — treat as a stable contract going forward.
+- [x] 15. Write `terraform/hub/ecr.tf` (ECR repos for `reference-service` and `k6-runner` images, `for_each` over a tfvars list) and `terraform/hub/oidc.tf` (hub-scoped `terraform-apply` and `build-and-push`/`deploy` roles).
+- [x] 16. Write `terraform/hub/outputs.tf` (vpc_id, private_subnet_ids, cluster_arn, cloudmap_namespace_id, ecr repo URLs) — treat as a stable contract going forward.
 - [ ] 17. Manually `terraform init && terraform apply` the hub module the first time; confirm resources in AWS console/CLI.
 
 **Reference service**
