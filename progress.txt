@@ -560,3 +560,35 @@ User ran, in order: `terraform plan` + `terraform apply` on hub (0 added, 0
 changed, 0 destroyed - output-only change), then `terraform init` (real
 backend, first time for this root module) + `terraform validate` on the
 scenario module - all succeeded.
+
+## 2026-07-31 — Task 20: terraform/scenarios/reference-service/k6.tf
+
+Added the k6 runner task definition (task definition only, no service -
+ecs-task-oneshot never creates one). Wired from the same hub remote-state
+outputs as service.tf: vpc_id, execution_role_arn,
+log_group_names["k6-runner"], ecr_repository_urls["k6-runner"]. Single
+container, command override ["run", "/scripts/reference-service/smoke.js"]
+- matches the plan's stated k6 packaging approach (scripts baked into the
+k6 image, task-def command selects which script runs).
+
+Extended iam.tf's existing task_role module call to add a second
+task_roles entry, "k6-runner" (also empty managed_policy_arns - the k6
+task only makes outbound HTTP calls to reference-service.internal and
+writes logs, no AWS API calls of its own). Added a k6_image_tag variable
+(default "latest") mirroring image_tag. Added three new outputs
+(k6_task_definition_arn, k6_task_definition_family, k6_security_group_id)
+for the future run-k6-task.yml workflow's `aws ecs run-task` invocation
+and network configuration.
+
+Ran `terraform fmt` (not just -check) once to fix alignment in k6.tf and
+service.tf before validating - cosmetic only.
+
+User ran `terraform init` (registers the new ecs-task-oneshot module
+reference and the updated iam-task-roles call) and `terraform validate`
+themselves - both succeeded.
+
+This completes the scenario module's Terraform authoring (tasks 19-20).
+Next is task 21: the first real apply of this scenario - but per the
+heads-up in task 19's entry, the reference-service image needs a manual
+docker build/tag/push to ECR first, since no image exists yet and no
+build-and-push CI exists until tasks 23-28.

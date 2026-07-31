@@ -99,7 +99,7 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 **Reference service**
 - [x] 18. Write the Go health-check service (`services/reference-service/`) + Dockerfile (distroless, static binary); build and run it locally to confirm `/healthz` works before containerizing infra around it.
 - [x] 19. Write `terraform/scenarios/reference-service/`: `main.tf` (remote state data source against hub), `service.tf` (ecs-service instantiation, Service Connect-enabled), `iam.tf` (scenario task role + github-oidc-role instantiation), `backend.tf` (own state key), `variables.tf`/`outputs.tf`/`terraform.tfvars`.
-- [ ] 20. Add `k6.tf` to the same scenario module instantiating `ecs-task-oneshot` for the k6 runner task definition (not yet run).
+- [x] 20. Add `k6.tf` to the same scenario module instantiating `ecs-task-oneshot` for the k6 runner task definition (not yet run).
 - [ ] 21. Manually `terraform apply` the reference-service scenario the first time; confirm the ECS service reaches steady state with 1 running task.
 
 **k6 harness**

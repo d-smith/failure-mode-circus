@@ -38,6 +38,12 @@ variable "image_tag" {
   default     = "latest"
 }
 
+variable "k6_image_tag" {
+  description = "Tag of the k6-runner image to use for the smoke-test task from ECR."
+  type        = string
+  default     = "latest"
+}
+
 variable "container_port" {
   description = "Port the reference-service container listens on."
   type        = number
