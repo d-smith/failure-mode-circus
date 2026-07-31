@@ -419,3 +419,30 @@ for-expression over module.ecr, matching ecr.tf's for_each keying.
 
 User ran `terraform init -backend=false` and `terraform validate` themselves
 — both succeeded.
+
+## 2026-07-31 — Task 17: terraform init/apply hub (real backend, first apply)
+
+First real infrastructure apply beyond bootstrap. User ran `terraform init`
+against the real S3/DynamoDB backend, then `terraform plan` (23 to add, 0
+change, 0 destroy — matched expectations exactly: VPC, 2 subnets, route
+table + 2 associations, VPC-endpoints SG, 3 interface endpoints (ecr.api,
+ecr.dkr, logs) + 1 S3 gateway endpoint, ECS cluster + Cloud Map namespace, 2
+CloudWatch log groups, 2 ECR repos + 2 lifecycle policies, 2 OIDC IAM roles
++ 2 inline policies), then `terraform apply` — "Apply complete! Resources:
+23 added, 0 changed, 0 destroyed."
+
+`terraform init` surfaced a deprecation warning: the S3 backend's
+`dynamodb_table` argument is deprecated in favor of `use_lockfile` (native
+S3 conditional-write locking, no separate DynamoDB table). Decided not to
+address this now — it's a cross-cutting change touching every root
+module's backend.tf plus a decision on the now-existing DynamoDB lock
+table — and saved a memory note to revisit it later as a standalone
+infra-cleanup task, not something to react to mid-task.
+
+Verified per the plan's Verification section: `aws ec2 describe-nat-gateways
+--filter Name=vpc-id,Values=vpc-0e8be3675649313d2` returned an empty list,
+confirming the no-NAT-Gateway design held for the real applied VPC.
+
+Hub is now live: VPC, ECS cluster, ECR repos, CloudWatch log groups, and
+both OIDC-assumable IAM roles exist in AWS and are ready for the reference-
+service scenario (tasks 18-21) to consume via terraform_remote_state.
