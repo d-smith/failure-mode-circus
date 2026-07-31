@@ -40,3 +40,8 @@ output "oidc_build_and_push_role_arn" {
   description = "ARN of the OIDC-trusted build-and-push/deploy role, for build-and-push.yml / deploy-service.yml / run-k6-task.yml's role-to-assume."
   value       = module.oidc_build_and_push.role_arn
 }
+
+output "execution_role_arn" {
+  description = "ARN of the shared ECS task execution role, used by every scenario's ecs-service / ecs-task-oneshot task definitions."
+  value       = module.task_roles.execution_role_arn
+}

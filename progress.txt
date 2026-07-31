@@ -446,3 +446,58 @@ confirming the no-NAT-Gateway design held for the real applied VPC.
 Hub is now live: VPC, ECS cluster, ECR repos, CloudWatch log groups, and
 both OIDC-assumable IAM roles exist in AWS and are ready for the reference-
 service scenario (tasks 18-21) to consume via terraform_remote_state.
+
+## 2026-07-31 — Task 18: services/reference-service/ Go health-check + Dockerfile
+
+Wrote a minimal Go HTTP service: single /healthz handler returning 200 "ok",
+listen address configurable via LISTEN_ADDR env var (default :8080) so the
+ECS task definition can override it later without a code change. go.mod
+targets Go 1.26 (matches the locally installed toolchain). No framework/
+router dependency — stdlib net/http is enough for a health-check endpoint.
+
+Dockerfile is a two-stage build: golang:1.26 compiles a CGO_ENABLED=0 static
+binary, then gcr.io/distroless/static-debian12 runs it as the only file in
+the final image (no shell, no package manager, minimal attack surface/size).
+
+Verified locally before treating this as done:
+- `go build` compiled cleanly.
+- Ran the compiled binary directly; `curl /healthz` returned 200 "ok".
+- `docker build` succeeded; ran the resulting image with port 8080 mapped
+  to the host, `curl /healthz` again returned 200 "ok" through the
+  container, confirming the distroless runtime has everything the binary
+  needs (no missing libc/CA-cert issues, though this service makes no
+  outbound calls that would need CA certs yet).
+
+Removed the now-redundant services/reference-service/.gitkeep. Cleaned up
+the local test image/container and temp binary afterward — nothing besides
+go.mod/main.go/Dockerfile was left in the service directory.
+
+Next: task 19 builds terraform/scenarios/reference-service/ to actually
+deploy this image via ECS, reading hub's outputs via terraform_remote_state.
+
+## 2026-07-31 — Ad hoc: shared execution role added to hub
+
+While scoping task 19 (scenario iam.tf), noticed hub never instantiated
+iam-task-roles at all, so no shared ECS task execution role existed
+anywhere — needed since the plan's design decision (line 59) states the
+execution role is shared across all scenarios, not created per-scenario.
+Asked the user to choose between adding it to hub (matches that design
+decision, one new stable output) vs. creating it per-scenario (simpler
+wiring but duplicates an identical role and contradicts "shared across all
+scenarios"). User chose adding it to hub.
+
+Added terraform/hub/iam.tf: module "task_roles" (iam-task-roles) with
+create_execution_role = true and an empty task_roles map — this call only
+creates the shared execution role, no per-scenario task roles (those belong
+in each scenario's own iam.tf). Added execution_role_arn to hub/outputs.tf
+(append-only, consistent with the stable-outputs contract).
+
+Since this modified an already-applied hub module, `terraform init` had to
+be re-run (new local module blocks require Terraform to register them even
+without backend changes) — hit and resolved a "Module not installed" error
+that way. `terraform plan` showed the expected 2 additions (execution role
++ policy attachment); `terraform apply` completed: "Resources: 2 added, 0
+changed, 0 destroyed."
+
+Hub's outputs.tf now exposes 9 values total (added execution_role_arn to
+the 8 from task 16).
