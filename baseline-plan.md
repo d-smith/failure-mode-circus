@@ -106,7 +106,7 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 - [x] 22. Write `k6/Dockerfile` (FROM `grafana/k6`, scripts copied in) and `k6/scripts/reference-service/smoke.js` (few VUs, short duration, hits `reference-service.internal`, asserts status 200 + latency threshold); build and smoke-test the image locally against a local run of the Go service if practical.
 
 **CI/CD workflows (one task each)**
-- [ ] 23. `.github/workflows/terraform-scenario.yml` — reusable plan/apply workflow, generic on working-directory input.
+- [x] 23. `.github/workflows/terraform-scenario.yml` — reusable plan/apply workflow, generic on working-directory input.
 - [ ] 24. `.github/workflows/build-and-push.yml` — reusable docker build/push to ECR via OIDC.
 - [ ] 25. `.github/workflows/deploy-service.yml` — reusable register-task-def + update-service + wait-for-steady-state.
 - [ ] 26. `.github/workflows/run-k6-task.yml` — reusable ecs run-task + poll + exit-code gate.

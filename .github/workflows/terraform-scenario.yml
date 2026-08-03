@@ -1,0 +1,91 @@
+name: Terraform Plan/Apply
+
+# Reusable plan/apply workflow, generic on working-directory - callers pass
+# any Terraform root module path (terraform/hub, terraform/scenarios/<name>,
+# ...) and whether to apply. Not triggered directly; only via workflow_call
+# from terraform-hub.yml, scenario-*.yml, etc.
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: "Path to the Terraform root module to plan/apply, e.g. terraform/hub or terraform/scenarios/reference-service."
+        required: true
+        type: string
+      apply:
+        description: "Apply the plan after a successful plan step. Callers should pass true only on merge to main, false on pull_request (plan-only)."
+        required: false
+        type: boolean
+        default: false
+      role-to-assume:
+        description: "ARN of the OIDC-trusted IAM role to assume for init/plan/apply. Defaults to the hub's shared terraform-apply role."
+        required: false
+        type: string
+        default: "arn:aws:iam::427848627088:role/failure-mode-circus-terraform-apply"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.role-to-assume }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: latest
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform plan -input=false -out=tfplan
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ inputs.working-directory }}/tfplan
+          retention-days: 1
+
+  apply:
+    name: Apply
+    needs: plan
+    if: inputs.apply
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ inputs.working-directory }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.role-to-assume }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: latest
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform apply -input=false tfplan

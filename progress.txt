@@ -677,3 +677,41 @@ This completes the "k6 harness" section (task 22). Next up is "CI/CD
 workflows" (tasks 23-28), starting with task 23:
 .github/workflows/terraform-scenario.yml (reusable plan/apply workflow,
 generic on working-directory input).
+
+## 2026-08-03 — Task 23: .github/workflows/terraform-scenario.yml
+
+Wrote the first reusable workflow (workflow_call only, not directly
+triggered) - two jobs:
+
+- plan: assumes the hub's shared terraform-apply OIDC role via
+  aws-actions/configure-aws-credentials, runs `terraform init` + `terraform
+  plan -out=tfplan` in inputs.working-directory, uploads tfplan as an
+  artifact.
+- apply: needs: plan, gated on `if: inputs.apply` so it only runs when the
+  caller explicitly asks (merge-to-main path, not PR); downloads the same
+  tfplan artifact and applies that exact reviewed plan rather than
+  re-planning, avoiding a review/apply gap.
+
+Inputs: working-directory (required, generic - this same file is meant to be
+called for both terraform/hub in task 27 and each scenario in task 28,
+matching baseline-plan.md's DRY-reusable-workflow design), apply (bool,
+default false), role-to-assume (defaults to
+arn:aws:iam::427848627088:role/failure-mode-circus-terraform-apply, the
+deterministic ARN from the github-oidc-role module's ${name_prefix}-${purpose}
+naming - hardcoded as a default the same way backend.tf hardcodes the state
+bucket/table, since a workflow can't do a Terraform data lookup before a role
+is assumed).
+
+terraform_version pinned to "latest" in hashicorp/setup-terraform, mirroring
+the README's existing stance on Go (track current rather than a hardcoded
+version that goes stale).
+
+Validated the file is syntactically valid YAML (python yaml.safe_load).
+Couldn't exercise workflow_call semantics for real - that needs an actual
+caller workflow invoking it (tasks 27/28) and a real PR/merge run (task 29's
+end-to-end proof).
+
+Removed the now-redundant .github/workflows/.gitkeep.
+
+Next up: task 24, .github/workflows/build-and-push.yml (reusable docker
+build/push to ECR via OIDC).
