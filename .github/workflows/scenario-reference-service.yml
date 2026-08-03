@@ -1,0 +1,127 @@
+name: Scenario - reference-service
+
+# Orchestrator chaining the reusable workflows (tasks 23-26) for the
+# reference-service scenario specifically. On every PR touching this
+# scenario's terraform/service/k6 files, only the terraform plan job runs
+# (plan-only, nothing deployed). On merge to main: apply -> build -> deploy
+# -> k6 run, in that order (see task 29's end-to-end proof).
+on:
+  pull_request:
+    paths:
+      - "terraform/scenarios/reference-service/**"
+      - "services/reference-service/**"
+      - "k6/**"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/scenarios/reference-service/**"
+      - "services/reference-service/**"
+      - "k6/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: scenario-reference-service
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    name: Terraform plan/apply
+    uses: ./.github/workflows/terraform-scenario.yml
+    with:
+      working-directory: terraform/scenarios/reference-service
+      apply: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+  # Only runs on merge to main - PRs stop after the plan-only terraform job
+  # above. Reads the dynamic (AWS-assigned) values later jobs need - subnet
+  # and security group IDs - straight from hub's and this scenario's own
+  # Terraform state, the same "stable outputs contract" the scenario module
+  # itself reads via terraform_remote_state. Deterministic project-naming
+  # values (cluster ARN aside) are passed as literals below instead, the
+  # same way role ARNs are hardcoded defaults elsewhere in these workflows.
+  read-outputs:
+    name: Read Terraform outputs
+    needs: terraform
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      cluster-arn: ${{ steps.hub.outputs.cluster-arn }}
+      private-subnet-ids: ${{ steps.hub.outputs.private-subnet-ids }}
+      k6-security-group-id: ${{ steps.scenario.outputs.k6-security-group-id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::427848627088:role/failure-mode-circus-terraform-apply
+          aws-region: us-east-1
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: latest
+          terraform_wrapper: false
+
+      - name: Read hub outputs
+        id: hub
+        working-directory: terraform/hub
+        run: |
+          terraform init -input=false
+          echo "cluster-arn=$(terraform output -raw cluster_arn)" >> "$GITHUB_OUTPUT"
+          echo "private-subnet-ids=$(terraform output -json private_subnet_ids | jq -r 'join(",")')" >> "$GITHUB_OUTPUT"
+
+      - name: Read scenario outputs
+        id: scenario
+        working-directory: terraform/scenarios/reference-service
+        run: |
+          terraform init -input=false
+          echo "k6-security-group-id=$(terraform output -raw k6_security_group_id)" >> "$GITHUB_OUTPUT"
+
+  build-reference-service:
+    name: Build reference-service image
+    needs: terraform
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      context: services/reference-service
+      ecr-repository: failure-mode-circus/reference-service
+
+  build-k6-runner:
+    name: Build k6-runner image
+    needs: terraform
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/build-and-push.yml
+    with:
+      context: k6
+      ecr-repository: failure-mode-circus/k6-runner
+
+  deploy-reference-service:
+    name: Deploy reference-service
+    needs: [read-outputs, build-reference-service]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy-service.yml
+    with:
+      cluster: ${{ needs.read-outputs.outputs.cluster-arn }}
+      service: reference-service
+      task-definition-family: failure-mode-circus-reference-service
+      container-name: reference-service
+      image: 427848627088.dkr.ecr.us-east-1.amazonaws.com/failure-mode-circus/reference-service:${{ needs.build-reference-service.outputs.image-tag }}
+
+  # Runs after both the fresh k6-runner image is pushed and
+  # reference-service has redeployed and reached steady state, so this is
+  # actually exercising what was just shipped. run-task always resolves the
+  # k6-runner task definition's *latest ACTIVE revision*, which already
+  # points at the :latest tag build-k6-runner just pushed - Fargate re-pulls
+  # on every task launch, so no task-def bump is needed for the new image
+  # content to take effect.
+  run-k6-smoke-test:
+    name: Run k6 smoke test
+    needs: [read-outputs, build-k6-runner, deploy-reference-service]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/run-k6-task.yml
+    with:
+      cluster: ${{ needs.read-outputs.outputs.cluster-arn }}
+      task-definition-family: failure-mode-circus-k6-runner
+      subnets: ${{ needs.read-outputs.outputs.private-subnet-ids }}
+      security-groups: ${{ needs.read-outputs.outputs.k6-security-group-id }}

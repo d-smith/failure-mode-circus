@@ -1,0 +1,97 @@
+name: Run k6 Task
+
+# Reusable ecs run-task + poll + exit-code gate, generic on
+# cluster/task-definition/network placement. Not triggered directly; only
+# via workflow_call from scenario orchestrator workflows.
+#
+# The k6-runner task definition (terraform's ecs-task-oneshot module) has no
+# aws_ecs_service, and RunTask has no serviceConnectConfiguration parameter -
+# standalone tasks can't join Service Connect as a client. That's fine here:
+# Cloud Map/Service Connect DNS names (reference-service.internal) resolve
+# via the VPC's normal DNS resolver for any ENI in the VPC, Service Connect
+# or not, so this task only needs plain network placement (subnets + its own
+# security group) to reach reference-service - no special client config.
+on:
+  workflow_call:
+    inputs:
+      cluster:
+        description: "ECS cluster name, e.g. failure-mode-circus-cluster."
+        required: true
+        type: string
+      task-definition-family:
+        description: "k6-runner task definition family to run the latest ACTIVE revision of, e.g. failure-mode-circus-k6-runner."
+        required: true
+        type: string
+      subnets:
+        description: "Comma-separated private subnet IDs to place the task in."
+        required: true
+        type: string
+      security-groups:
+        description: "Comma-separated security group IDs for the task (typically the k6-runner scenario's own SG)."
+        required: true
+        type: string
+      role-to-assume:
+        description: "ARN of the OIDC-trusted IAM role to assume for run-task/describe-tasks. Defaults to the hub's shared build-and-push/deploy role."
+        required: false
+        type: string
+        default: "arn:aws:iam::427848627088:role/failure-mode-circus-build-and-push"
+    outputs:
+      exit-code:
+        description: "Exit code of the k6 container. Non-zero means a check or threshold failed (or the container crashed)."
+        value: ${{ jobs.run-k6.outputs.exit-code }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  run-k6:
+    name: Run k6 task
+    runs-on: ubuntu-latest
+    outputs:
+      exit-code: ${{ steps.result.outputs.exit-code }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.role-to-assume }}
+          aws-region: us-east-1
+
+      - name: Start k6 task
+        id: start
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "${{ inputs.cluster }}" \
+            --task-definition "${{ inputs.task-definition-family }}" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ inputs.subnets }}],securityGroups=[${{ inputs.security-groups }}],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' --output text)
+          echo "task-arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+          echo "Started task $TASK_ARN"
+
+      - name: Poll until the task stops
+        run: |
+          aws ecs wait tasks-stopped \
+            --cluster "${{ inputs.cluster }}" \
+            --tasks "${{ steps.start.outputs.task-arn }}"
+
+      - name: Report result and gate on exit code
+        id: result
+        run: |
+          TASK_JSON=$(aws ecs describe-tasks \
+            --cluster "${{ inputs.cluster }}" \
+            --tasks "${{ steps.start.outputs.task-arn }}")
+
+          STOP_CODE=$(echo "$TASK_JSON" | jq -r '.tasks[0].stopCode')
+          STOPPED_REASON=$(echo "$TASK_JSON" | jq -r '.tasks[0].stoppedReason')
+          EXIT_CODE=$(echo "$TASK_JSON" | jq -r '.tasks[0].containers[0].exitCode // empty')
+
+          echo "Stop code: $STOP_CODE"
+          echo "Stopped reason: $STOPPED_REASON"
+          echo "Container exit code: ${EXIT_CODE:-<none>}"
+
+          echo "exit-code=${EXIT_CODE:-1}" >> "$GITHUB_OUTPUT"
+
+          if [ "$STOP_CODE" != "EssentialContainerExited" ] || [ -z "$EXIT_CODE" ] || [ "$EXIT_CODE" != "0" ]; then
+            echo "k6 task did not exit cleanly"
+            exit 1
+          fi

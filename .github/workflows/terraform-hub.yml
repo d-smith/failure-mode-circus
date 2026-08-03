@@ -1,0 +1,30 @@
+name: Terraform Hub
+
+# Plans terraform/hub on every PR that touches hub or the shared modules it
+# composes, and applies on merge to main. First direct trigger (not
+# workflow_call) and first caller of terraform-scenario.yml.
+on:
+  pull_request:
+    paths:
+      - "terraform/hub/**"
+      - "terraform/modules/**"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/hub/**"
+      - "terraform/modules/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-hub
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    uses: ./.github/workflows/terraform-scenario.yml
+    with:
+      working-directory: terraform/hub
+      apply: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

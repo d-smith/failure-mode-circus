@@ -1,0 +1,99 @@
+name: Deploy Service
+
+# Reusable register-task-def + update-service + wait-for-steady-state,
+# generic on cluster/service/container/image. Not triggered directly; only
+# via workflow_call from scenario orchestrator workflows.
+#
+# Terraform (ecs-service module) owns the task definition's shape - this
+# workflow only swaps one container's image and re-registers a new revision,
+# it never redefines CPU/memory/networking/etc. That's why it works off
+# `aws ecs describe-task-definition` + jq rather than a static task-def file
+# checked into the repo (there isn't one; Terraform is the source of truth).
+on:
+  workflow_call:
+    inputs:
+      cluster:
+        description: "ECS cluster name, e.g. failure-mode-circus-cluster."
+        required: true
+        type: string
+      service:
+        description: "ECS service name to update, e.g. reference-service."
+        required: true
+        type: string
+      task-definition-family:
+        description: "Task definition family to base the new revision on, e.g. failure-mode-circus-reference-service (Terraform's ecs-service module names families \"${name_prefix}-${service_name}\")."
+        required: true
+        type: string
+      container-name:
+        description: "Name of the container within the task definition whose image gets swapped, e.g. reference-service."
+        required: true
+        type: string
+      image:
+        description: "Full image URI (registry/repository:tag) to deploy, typically composed from build-and-push.yml's outputs."
+        required: true
+        type: string
+      role-to-assume:
+        description: "ARN of the OIDC-trusted IAM role to assume for ECS deploy actions. Defaults to the hub's shared build-and-push/deploy role."
+        required: false
+        type: string
+        default: "arn:aws:iam::427848627088:role/failure-mode-circus-build-and-push"
+    outputs:
+      task-definition-arn:
+        description: "ARN of the newly registered task definition revision."
+        value: ${{ jobs.deploy.outputs.task-definition-arn }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    outputs:
+      task-definition-arn: ${{ steps.register.outputs.task-definition-arn }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.role-to-assume }}
+          aws-region: us-east-1
+
+      - name: Fetch current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "${{ inputs.task-definition-family }}" \
+            --query 'taskDefinition' > task-def.json
+
+      - name: Swap container image and strip read-only fields
+        run: |
+          jq --arg IMAGE "${{ inputs.image }}" --arg NAME "${{ inputs.container-name }}" '
+            .containerDefinitions = (.containerDefinitions | map(
+              if .name == $NAME then .image = $IMAGE else . end
+            ))
+            | del(
+                .taskDefinitionArn, .revision, .status, .requiresAttributes,
+                .compatibilities, .registeredAt, .registeredBy
+              )
+          ' task-def.json > new-task-def.json
+
+      - name: Register new task definition revision
+        id: register
+        run: |
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-task-def.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "task-definition-arn=$NEW_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Update service
+        run: |
+          aws ecs update-service \
+            --cluster "${{ inputs.cluster }}" \
+            --service "${{ inputs.service }}" \
+            --task-definition "${{ steps.register.outputs.task-definition-arn }}" \
+            --force-new-deployment
+
+      - name: Wait for service to reach steady state
+        run: |
+          aws ecs wait services-stable \
+            --cluster "${{ inputs.cluster }}" \
+            --services "${{ inputs.service }}"

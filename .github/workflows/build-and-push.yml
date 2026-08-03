@@ -1,0 +1,62 @@
+name: Build and Push
+
+# Reusable docker build/push to ECR, generic on build context + target repo.
+# Not triggered directly; only via workflow_call from scenario orchestrator
+# workflows (e.g. scenario-reference-service.yml).
+on:
+  workflow_call:
+    inputs:
+      context:
+        description: "Docker build context (Dockerfile expected at <context>/Dockerfile), e.g. services/reference-service or k6."
+        required: true
+        type: string
+      ecr-repository:
+        description: "ECR repository name to push to, e.g. failure-mode-circus/reference-service."
+        required: true
+        type: string
+      role-to-assume:
+        description: "ARN of the OIDC-trusted IAM role to assume for ECR login/push. Defaults to the hub's shared build-and-push role."
+        required: false
+        type: string
+        default: "arn:aws:iam::427848627088:role/failure-mode-circus-build-and-push"
+    outputs:
+      image-tag:
+        description: "The git-SHA tag pushed alongside :latest, so callers (deploy-service.yml) can pin a deploy to the exact image just built rather than trusting a possibly-raced :latest."
+        value: ${{ jobs.build-and-push.outputs.image-tag }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    name: Build and push
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.role-to-assume }}
+          aws-region: us-east-1
+
+      - id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - id: image
+        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build, tag, and push image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ inputs.ecr-repository }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          docker build \
+            -t "$REGISTRY/$REPOSITORY:$IMAGE_TAG" \
+            -t "$REGISTRY/$REPOSITORY:latest" \
+            ${{ inputs.context }}
+          docker push "$REGISTRY/$REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$REPOSITORY:latest"
