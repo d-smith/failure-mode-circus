@@ -48,9 +48,17 @@ data "aws_iam_policy_document" "terraform_apply" {
   }
 
   statement {
-    sid       = "LogGroups"
-    actions   = ["logs:*"]
-    resources = ["arn:aws:logs:*:${local.account_id}:log-group:/ecs/${var.name_prefix}*:*"]
+    sid     = "LogGroups"
+    actions = ["logs:*"]
+    # Both ARN forms are needed: some actions (ListTagsForResource,
+    # DeleteLogGroup, PutRetentionPolicy, TagResource...) require the bare
+    # log-group ARN with no suffix; others operate on log streams within it
+    # and need the ":*" suffix. Confirmed via a live ListTagsForResource
+    # AccessDeniedException (task 29) - the bare form was missing entirely.
+    resources = [
+      "arn:aws:logs:*:${local.account_id}:log-group:/ecs/${var.name_prefix}*",
+      "arn:aws:logs:*:${local.account_id}:log-group:/ecs/${var.name_prefix}*:*",
+    ]
   }
 
   # logs:DescribeLogGroups doesn't support resource-level scoping the way
