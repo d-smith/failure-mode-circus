@@ -15,7 +15,7 @@ variable "oidc_provider_arn" {
 }
 
 variable "github_repo" {
-  description = "owner/repo this role trusts, e.g. \"d-smith/failure-mode-circus\"."
+  description = "The exact value GitHub sends in the OIDC sub claim's repo segment - normally \"owner/repo\", but if the account or repo has ever been renamed, GitHub switches to the immutable-ID form \"owner@ownerId/repo@repoId\" instead. Verify against a live token (e.g. a CloudTrail AssumeRoleWithWebIdentity denial) rather than assuming the plain form."
   type        = string
 }
 

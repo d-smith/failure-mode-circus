@@ -53,6 +53,18 @@ data "aws_iam_policy_document" "terraform_apply" {
     resources = ["arn:aws:logs:*:${local.account_id}:log-group:/ecs/${var.name_prefix}*:*"]
   }
 
+  # logs:DescribeLogGroups doesn't support resource-level scoping the way
+  # other logs:* actions do - AWS evaluates it against a fixed "list all"
+  # resource pattern (empty log-group segment) rather than a named log
+  # group ARN, so it has to be granted account-wide like ec2:*/ecs:*/
+  # servicediscovery:* above. Confirmed via a live `terraform plan`
+  # AccessDeniedException (task 29).
+  statement {
+    sid       = "LogsDescribeAccountWide"
+    actions   = ["logs:DescribeLogGroups"]
+    resources = ["*"]
+  }
+
   statement {
     sid       = "IamReadOnly"
     actions   = ["iam:Get*", "iam:List*"]
