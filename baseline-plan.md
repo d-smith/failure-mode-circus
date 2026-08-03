@@ -111,7 +111,7 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 - [x] 25. `.github/workflows/deploy-service.yml` — reusable register-task-def + update-service + wait-for-steady-state.
 - [x] 26. `.github/workflows/run-k6-task.yml` — reusable ecs run-task + poll + exit-code gate.
 - [x] 27. `.github/workflows/terraform-hub.yml` — plan on PR / apply on merge for `terraform/hub` + `terraform/modules`.
-- [ ] 28. `.github/workflows/scenario-reference-service.yml` — orchestrator chaining tasks 23-26 for the reference-service scenario specifically.
+- [x] 28. `.github/workflows/scenario-reference-service.yml` — orchestrator chaining tasks 23-26 for the reference-service scenario specifically.
 
 **End-to-end proof and wrap-up**
 - [ ] 29. Open a PR touching the reference-service scenario, confirm plan-only jobs run clean; merge to main and watch apply → build → deploy → k6 run execute; confirm the k6 ECS task exits 0 and the pipeline goes green.

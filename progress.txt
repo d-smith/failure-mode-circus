@@ -859,3 +859,70 @@ Next up: task 28, .github/workflows/scenario-reference-service.yml (the
 orchestrator chaining tasks 23-26 - terraform-scenario, build-and-push,
 deploy-service, run-k6-task - for the reference-service scenario
 specifically).
+
+## 2026-08-03 — Task 28: .github/workflows/scenario-reference-service.yml
+
+Wrote the orchestrator, triggered directly (pull_request + push to main,
+both path-filtered to terraform/scenarios/reference-service/**,
+services/reference-service/**, k6/**). Job graph:
+
+- terraform: calls terraform-scenario.yml (task 23) against
+  terraform/scenarios/reference-service, apply only on push-to-main - runs
+  on every PR too (plan-only), matching task 29's "confirm plan-only jobs
+  run clean" requirement.
+- read-outputs (needs: terraform, push-to-main only): a plain job, not a
+  reusable-workflow call, since terraform-scenario.yml only plans/applies,
+  it doesn't expose arbitrary terraform outputs. Assumes the broader
+  terraform-apply role (build-and-push/deploy role has no s3:GetObject on
+  the tfstate bucket, confirmed by re-reading hub/oidc.tf's policy
+  statements - only terraform-apply can read state), runs `terraform init` +
+  `terraform output` against both terraform/hub (cluster_arn,
+  private_subnet_ids) and terraform/scenarios/reference-service
+  (k6_security_group_id) to surface the AWS-assigned values (subnet/SG IDs)
+  that can't be hardcoded like the deterministic project-naming values below
+  can.
+- build-reference-service / build-k6-runner (needs: terraform, push-to-main
+  only, run in parallel): call build-and-push.yml (task 24) once per image -
+  services/reference-service -> failure-mode-circus/reference-service,
+  k6/ -> failure-mode-circus/k6-runner. Building k6-runner here too (not
+  just reference-service) since the one shared k6 image is still scoped to
+  this scenario's pipeline for now - there's no separate k6-image workflow
+  in the plan's file list.
+- deploy-reference-service (needs: read-outputs, build-reference-service):
+  calls deploy-service.yml (task 25) with cluster from read-outputs'
+  cluster-arn, task-definition-family/container-name/service hardcoded as
+  the deterministic values confirmed against the actual Terraform modules
+  (failure-mode-circus-reference-service family, reference-service
+  container/service name), image composed from the hardcoded ECR registry
+  host (427848627088.dkr.ecr.us-east-1.amazonaws.com, same account/region as
+  everywhere else in this project's CI) plus build-reference-service's
+  image-tag output.
+- run-k6-smoke-test (needs: read-outputs, build-k6-runner,
+  deploy-reference-service): calls run-k6-task.yml (task 26) against the
+  k6-runner family, subnets/security-groups from read-outputs. Ordered after
+  both the fresh k6-runner image push and reference-service's redeploy
+  reaching steady state, so the smoke test actually exercises what was just
+  shipped. No task-def bump needed for the new k6-runner image content to
+  take effect - run-task always resolves the family's latest ACTIVE
+  revision, which already points at the :latest tag, and Fargate re-pulls
+  fresh on every task launch.
+
+This achieves the "apply -> build -> deploy -> k6 run" sequence task 29
+describes, with the two image builds happening in parallel. Added
+`concurrency: { group: scenario-reference-service, cancel-in-progress: false }`,
+same reasoning as terraform-hub.yml (task 27).
+
+Initially added an env.ECR_REGISTRY var for the image URI, then removed it -
+workflow-level `env` isn't in the available-contexts list for a reusable
+workflow call's `with:` block, so it would have been dead/inert; hardcoded
+the registry literal directly in the one place it's used instead.
+
+Validated the file is syntactically valid YAML (python yaml.safe_load); same
+caveat as tasks 23-27 - can't exercise the real job graph/OIDC/terraform
+output reads without an actual PR and merge against this repo (task 29).
+
+This completes the "CI/CD workflows" section (tasks 23-28) - all six
+workflow files are written. Next up is task 29: the end-to-end proof - open
+a PR touching the reference-service scenario, confirm plan-only jobs run
+clean, merge to main, watch apply -> build -> deploy -> k6 run execute, and
+confirm the pipeline goes green.
