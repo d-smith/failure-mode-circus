@@ -715,3 +715,119 @@ Removed the now-redundant .github/workflows/.gitkeep.
 
 Next up: task 24, .github/workflows/build-and-push.yml (reusable docker
 build/push to ECR via OIDC).
+
+## 2026-08-03 — Task 24: .github/workflows/build-and-push.yml
+
+Wrote the second reusable workflow (workflow_call only) - single job:
+configure-aws-credentials assumes the hub's narrower build-and-push OIDC role
+(default arn:aws:iam::427848627088:role/failure-mode-circus-build-and-push,
+same hardcoded-default-ARN pattern as terraform-scenario.yml), then
+aws-actions/amazon-ecr-login, then a single docker build tagging the image
+both :latest and :<git-sha>, pushing both tags.
+
+Inputs: context (required - docker build context/Dockerfile location, e.g.
+services/reference-service or k6) and ecr-repository (required - full repo
+name, e.g. failure-mode-circus/reference-service) are the generic axes each
+caller (build-and-push.yml calls, one per image, from
+scenario-reference-service.yml in task 28) varies; role-to-assume has the
+same overridable-default treatment as task 23.
+
+Decided to push a git-SHA tag alongside :latest, not just :latest -
+Terraform's scenario modules still default to deploying :latest
+(unchanged), but this gives deploy-service.yml (task 25) a way to pin a
+deploy to the exact image just built via a workflow_call output
+(image-tag), rather than only ever trusting whatever :latest happens to
+resolve to at deploy time (which would race if two builds landed close
+together). Also matches the ecr-repo module's lifecycle policy (task 11),
+which was already designed to retain the last 10 *tagged* images, implying
+multiple tags accumulating over time rather than just one repeatedly
+overwritten :latest.
+
+Validated the file is syntactically valid YAML (python yaml.safe_load); same
+caveat as task 23 - can't exercise workflow_call/OIDC/ECR push for real
+without an actual caller workflow and a real Actions run.
+
+Next up: task 25, .github/workflows/deploy-service.yml (reusable
+register-task-def + update-service + wait-for-steady-state).
+
+## 2026-08-03 — Task 25: .github/workflows/deploy-service.yml
+
+Wrote the third reusable workflow (workflow_call only) - single job, five
+steps: configure-aws-credentials (same build-and-push/deploy OIDC role as
+task 24, default ARN arn:aws:iam::427848627088:role/failure-mode-circus-build-and-push),
+`aws ecs describe-task-definition` to fetch the live task def, a jq step that
+swaps one container's image and strips the read-only fields ECS rejects on
+register (taskDefinitionArn/revision/status/requiresAttributes/
+compatibilities/registeredAt/registeredBy), `aws ecs register-task-definition`
+for the new revision, `aws ecs update-service --force-new-deployment`, then
+`aws ecs wait services-stable` for the steady-state wait.
+
+Deliberately did NOT use the official aws-actions/amazon-ecs-render-task-definition
++ amazon-ecs-deploy-task-definition actions, since those expect a static
+task-definition JSON file checked into the repo - this project has no such
+file, Terraform's ecs-service module is the sole source of truth for task-def
+shape (cpu/memory/networking/etc). Describing the live task def and only
+patching the image keeps this workflow from ever drifting out of sync with
+what Terraform defines.
+
+Inputs: cluster, service, task-definition-family, container-name, image (all
+required - generic per-caller values; confirmed against the actual
+reference-service scenario that Terraform's ecs-service module names task-def
+families "${name_prefix}-${service_name}" i.e.
+failure-mode-circus-reference-service, with container name and ECS service
+name both "reference-service"), role-to-assume (same overridable-default
+pattern as tasks 23/24). Output: task-definition-arn, for the caller to log
+or chain.
+
+Validated the file is syntactically valid YAML (python yaml.safe_load); same
+caveat as tasks 23/24 - can't exercise this against a real ECS service
+without an actual caller workflow and Actions run.
+
+Next up: task 26, .github/workflows/run-k6-task.yml (reusable ecs run-task +
+poll + exit-code gate).
+
+## 2026-08-03 — Task 26: .github/workflows/run-k6-task.yml
+
+Before writing, researched a real design question: how does the k6-runner
+oneshot task (no aws_ecs_service, per task 13/20) reach
+reference-service.internal, given RunTask has no serviceConnectConfiguration
+parameter (confirmed via the AWS CLI ecs run-task reference docs -
+standalone tasks cannot join Service Connect as a client)? Resolved: Cloud
+Map/Service Connect DNS records are published as normal private DNS in the
+VPC's associated Route 53 zone, resolvable by any ENI in the VPC (the
+networking module already has DNS support/hostnames enabled) regardless of
+whether that resource is itself Service Connect-enabled - the proxy sidecar
+adds resiliency features for enrolled clients, but plain DNS resolution +
+direct connect works for any in-VPC caller, gated only by security groups
+(reference-service's SG already allows ingress from the whole VPC CIDR, and
+the k6 task's SG allows the needed egress). So this workflow only needs
+plain network placement (subnets + its own security group), no special
+client wiring.
+
+Wrote the fourth reusable workflow (workflow_call only) - single job, three
+steps: configure-aws-credentials (same build-and-push/deploy OIDC role
+default as tasks 24/25, which already covers ecs:RunTask/StopTask/ListTasks/
+DescribeTasks per hub/oidc.tf's EcsDeployAndRunTask statement), `aws ecs
+run-task` with --network-configuration built from comma-separated
+subnets/security-groups inputs (GitHub Actions workflow_call inputs have no
+list type, hence comma-separated strings), `aws ecs wait tasks-stopped` for
+the poll, then `aws ecs describe-tasks` to pull stopCode/stoppedReason/
+container exitCode - gates the job (exit 1) unless stopCode is
+"EssentialContainerExited" and the container's exitCode is exactly "0",
+matching smoke.js's threshold-driven non-zero exit on a failed check/
+threshold (task 22). Exposes exit-code as a workflow_call output too.
+
+Inputs: cluster, task-definition-family, subnets, security-groups (all
+required, generic per-caller values - task-definition-family runs the
+family's latest ACTIVE revision without pinning a specific one), plus the
+same overridable role-to-assume default.
+
+Validated the file is syntactically valid YAML (python yaml.safe_load); same
+caveat as tasks 23-25 - can't exercise a real run-task/wait/describe cycle
+without an actual caller workflow and Actions run.
+
+This completes the four generic reusable workflows (tasks 23-26). Next up is
+task 27: .github/workflows/terraform-hub.yml (plan on PR / apply on merge for
+terraform/hub + terraform/modules) - the first workflow that's actually
+triggered directly (on pull_request/push) rather than only via
+workflow_call, and the first caller of terraform-scenario.yml.

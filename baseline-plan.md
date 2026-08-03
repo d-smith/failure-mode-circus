@@ -107,9 +107,9 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 
 **CI/CD workflows (one task each)**
 - [x] 23. `.github/workflows/terraform-scenario.yml` — reusable plan/apply workflow, generic on working-directory input.
-- [ ] 24. `.github/workflows/build-and-push.yml` — reusable docker build/push to ECR via OIDC.
-- [ ] 25. `.github/workflows/deploy-service.yml` — reusable register-task-def + update-service + wait-for-steady-state.
-- [ ] 26. `.github/workflows/run-k6-task.yml` — reusable ecs run-task + poll + exit-code gate.
+- [x] 24. `.github/workflows/build-and-push.yml` — reusable docker build/push to ECR via OIDC.
+- [x] 25. `.github/workflows/deploy-service.yml` — reusable register-task-def + update-service + wait-for-steady-state.
+- [x] 26. `.github/workflows/run-k6-task.yml` — reusable ecs run-task + poll + exit-code gate.
 - [ ] 27. `.github/workflows/terraform-hub.yml` — plan on PR / apply on merge for `terraform/hub` + `terraform/modules`.
 - [ ] 28. `.github/workflows/scenario-reference-service.yml` — orchestrator chaining tasks 23-26 for the reference-service scenario specifically.
 
