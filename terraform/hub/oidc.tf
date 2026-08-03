@@ -48,9 +48,29 @@ data "aws_iam_policy_document" "terraform_apply" {
   }
 
   statement {
-    sid       = "LogGroups"
-    actions   = ["logs:*"]
-    resources = ["arn:aws:logs:*:${local.account_id}:log-group:/ecs/${var.name_prefix}*:*"]
+    sid     = "LogGroups"
+    actions = ["logs:*"]
+    # Both ARN forms are needed: some actions (ListTagsForResource,
+    # DeleteLogGroup, PutRetentionPolicy, TagResource...) require the bare
+    # log-group ARN with no suffix; others operate on log streams within it
+    # and need the ":*" suffix. Confirmed via a live ListTagsForResource
+    # AccessDeniedException (task 29) - the bare form was missing entirely.
+    resources = [
+      "arn:aws:logs:*:${local.account_id}:log-group:/ecs/${var.name_prefix}*",
+      "arn:aws:logs:*:${local.account_id}:log-group:/ecs/${var.name_prefix}*:*",
+    ]
+  }
+
+  # logs:DescribeLogGroups doesn't support resource-level scoping the way
+  # other logs:* actions do - AWS evaluates it against a fixed "list all"
+  # resource pattern (empty log-group segment) rather than a named log
+  # group ARN, so it has to be granted account-wide like ec2:*/ecs:*/
+  # servicediscovery:* above. Confirmed via a live `terraform plan`
+  # AccessDeniedException (task 29).
+  statement {
+    sid       = "LogsDescribeAccountWide"
+    actions   = ["logs:DescribeLogGroups"]
+    resources = ["*"]
   }
 
   statement {
