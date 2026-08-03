@@ -831,3 +831,31 @@ task 27: .github/workflows/terraform-hub.yml (plan on PR / apply on merge for
 terraform/hub + terraform/modules) - the first workflow that's actually
 triggered directly (on pull_request/push) rather than only via
 workflow_call, and the first caller of terraform-scenario.yml.
+
+## 2026-08-03 — Task 27: .github/workflows/terraform-hub.yml
+
+Wrote the first directly-triggered workflow: pull_request and push-to-main
+triggers, both path-filtered to terraform/hub/** and terraform/modules/**
+(a shared-module change should re-plan/apply hub too, since hub composes
+every module). Single job calling terraform-scenario.yml (task 23) via a
+local `uses: ./.github/workflows/terraform-scenario.yml` reference, with
+working-directory: terraform/hub and apply computed as
+`github.event_name == 'push' && github.ref == 'refs/heads/main'` - true only
+on a merge-to-main push, false (plan-only) on every PR. role-to-assume left
+at terraform-scenario.yml's default (hub's own terraform-apply role).
+
+Added `concurrency: { group: terraform-hub, cancel-in-progress: false }` -
+queues overlapping runs against hub rather than canceling a possibly
+mid-apply run, since a canceled terraform apply is far more dangerous than a
+queued one waiting its turn (the S3/DynamoDB state lock would otherwise just
+make a second concurrent run fail outright rather than queue cleanly).
+
+Validated the file is syntactically valid YAML (python yaml.safe_load); same
+caveat as tasks 23-26 - can't exercise the actual PR-plan / merge-apply
+behavior without a real PR against this repo (that's what task 29's
+end-to-end proof is for).
+
+Next up: task 28, .github/workflows/scenario-reference-service.yml (the
+orchestrator chaining tasks 23-26 - terraform-scenario, build-and-push,
+deploy-service, run-k6-task - for the reference-service scenario
+specifically).
