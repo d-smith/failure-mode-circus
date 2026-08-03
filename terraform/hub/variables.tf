@@ -25,7 +25,7 @@ variable "ecr_repo_names" {
 }
 
 variable "github_repo" {
-  description = "GitHub repo (owner/name) the OIDC-trusted roles trust."
+  description = "GitHub repo the OIDC-trusted roles trust, in the sub-claim form GitHub actually sends. Uses the owner@ownerId/repo@repoId immutable-ID format GitHub switches to once an account/repo has been renamed - confirmed against a live AssumeRoleWithWebIdentity denial in CloudTrail (task 29) - rather than the plain owner/repo form."
   type        = string
-  default     = "d-smith/failure-mode-circus"
+  default     = "d-smith@758310/failure-mode-circus@1315382562"
 }
