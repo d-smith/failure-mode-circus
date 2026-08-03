@@ -7,7 +7,6 @@ import (
 )
 
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("healthz check")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
