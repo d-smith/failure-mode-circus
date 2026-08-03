@@ -19,6 +19,7 @@ terraform.rc
 *.dylib
 *.test
 *.out
+services/*/reference-service
 
 # OS
 .DS_Store
