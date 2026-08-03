@@ -592,3 +592,88 @@ Next is task 21: the first real apply of this scenario - but per the
 heads-up in task 19's entry, the reference-service image needs a manual
 docker build/tag/push to ECR first, since no image exists yet and no
 build-and-push CI exists until tasks 23-28.
+
+## 2026-07-31 — Task 21: terraform apply reference-service scenario (first time)
+
+Manual pre-req: user rebuilt the reference-service image locally
+(`docker build`, same Dockerfile as task 18), authenticated Docker to ECR
+via `aws ecr get-login-password` (using their AWS SSO profile - confirmed
+`--profile`/`AWS_PROFILE` works the same way it does for `terraform apply`),
+tagged and pushed it to
+427848627088.dkr.ecr.us-east-1.amazonaws.com/failure-mode-circus/reference-service:latest.
+
+User then ran `terraform plan` + `terraform apply` in
+terraform/scenarios/reference-service/: "Apply complete! Resources: 7
+added, 0 changed, 0 destroyed" - matches expectations exactly (reference_service
+module: security group + task definition + ECS service = 3; k6_runner
+module: security group + task definition = 2; iam-task-roles: 2 new task
+roles = 7 total).
+
+Verified per the plan's Verification section: `aws ecs describe-services
+--cluster failure-mode-circus-cluster --services reference-service`
+returned status ACTIVE, desiredCount 1, runningCount 1, deployment
+rolloutState COMPLETED - the ECS service reached steady state with 1
+running task, confirmed end-to-end (VPC endpoints for ECR/logs pull working
+with no NAT Gateway, Service Connect-enabled task definition registered and
+running, image pull succeeded from the freshly-pushed ECR tag).
+
+This completes the "Reference service" section (tasks 18-21). The
+reference-service is now live in AWS, reachable internally at
+reference-service.internal via Service Connect. Next up is the "k6 harness"
+section (task 22): k6/Dockerfile + k6/scripts/reference-service/smoke.js.
+
+## 2026-08-03 — Task 22: k6/Dockerfile + k6/scripts/reference-service/smoke.js
+
+Wrote smoke.js first: 3 VUs, 30s duration, targets
+reference-service.internal:8080 by default (Service Connect DNS) but reads
+BASE_URL from the environment so it can also point at a local instance of the
+Go service. Checks status 200 + body "ok" on /healthz; thresholds
+p(95)<500ms and checks rate>0.99 - either failing exits k6 non-zero, which
+run-k6-task.yml (task 26) will key its exit-code gate off of.
+
+Verified the script directly first: installed k6 locally via
+`go install go.k6.io/k6@latest` (resolved to v1.8.0 - Docker wasn't available
+in the shell at that point), ran the Go service locally on :8080, ran
+smoke.js against it with BASE_URL=http://localhost:8080 - 90 iterations,
+180/180 checks passed, p(95)=1.01ms, exit 0.
+
+Wrote k6/Dockerfile: FROM grafana/k6, COPY scripts/ /scripts/ - no entrypoint
+override needed since the base image's ENTRYPOINT ["k6"] combines with the
+ECS task-def's command override (["run", "/scripts/reference-service/smoke.js"],
+from task 20) to invoke the right script. Initially pinned to grafana/k6:1.8.0
+to match the locally-installed CLI, but Docker turned out to be available in
+this environment after all, so built and smoke-tested the actual image:
+
+- First attempt (against the locally-running Go binary via `--network host`
+  and separately via `--add-host=host.docker.internal:host-gateway`) failed -
+  this sandboxed dev environment's Docker backend runs in an isolated VM that
+  doesn't share the host network namespace, so neither reached localhost:8080.
+- Switched to a fully containerized test instead: built
+  services/reference-service's existing Dockerfile too, ran both containers
+  on a shared Docker network, pointed k6 at the service by container name.
+  This is a closer match to production anyway (container-to-container DNS,
+  same shape as Service Connect resolving reference-service.internal). 180/180
+  checks passed, p(95)=1.11ms, exit 0.
+- User asked to leverage k6 2.1.0 (Docker Hub's actual current stable,
+  vs. the 1.8.0 the go install path happened to resolve) instead of pinning
+  to match the CLI. Repinned k6/Dockerfile to grafana/k6:2.1.0, rebuilt, reran
+  the same containerized test - 180/180 checks passed, p(95)=1.24ms, exit 0.
+
+Updated README.md's "Running the k6 smoke test locally" section to lead with
+the fully-containerized approach (build both images, shared Docker network,
+address the service container by name, matches the exact pinned 2.1.0 image
+that ships to ECR) and demoted the native `go install`-CLI method to a
+"quicker iteration" secondary option, flagging that it currently resolves to
+a different k6 version (1.8.0) than the Dockerfile's pin (2.1.0) - so it's a
+quick sanity check on script logic, not a substitute for the containerized
+run. Also noted `--network host`/`host.docker.internal` isn't reliable across
+Docker setups, per what was hit in this session.
+
+Cleaned up all local test containers, the test network, and locally-built
+images after each verification pass; removed the now-redundant k6/.gitkeep
+and k6/scripts/reference-service/.gitkeep.
+
+This completes the "k6 harness" section (task 22). Next up is "CI/CD
+workflows" (tasks 23-28), starting with task 23:
+.github/workflows/terraform-scenario.yml (reusable plan/apply workflow,
+generic on working-directory input).

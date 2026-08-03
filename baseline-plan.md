@@ -100,10 +100,10 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 - [x] 18. Write the Go health-check service (`services/reference-service/`) + Dockerfile (distroless, static binary); build and run it locally to confirm `/healthz` works before containerizing infra around it.
 - [x] 19. Write `terraform/scenarios/reference-service/`: `main.tf` (remote state data source against hub), `service.tf` (ecs-service instantiation, Service Connect-enabled), `iam.tf` (scenario task role + github-oidc-role instantiation), `backend.tf` (own state key), `variables.tf`/`outputs.tf`/`terraform.tfvars`.
 - [x] 20. Add `k6.tf` to the same scenario module instantiating `ecs-task-oneshot` for the k6 runner task definition (not yet run).
-- [ ] 21. Manually `terraform apply` the reference-service scenario the first time; confirm the ECS service reaches steady state with 1 running task.
+- [x] 21. Manually `terraform apply` the reference-service scenario the first time; confirm the ECS service reaches steady state with 1 running task.
 
 **k6 harness**
-- [ ] 22. Write `k6/Dockerfile` (FROM `grafana/k6`, scripts copied in) and `k6/scripts/reference-service/smoke.js` (few VUs, short duration, hits `reference-service.internal`, asserts status 200 + latency threshold); build and smoke-test the image locally against a local run of the Go service if practical.
+- [x] 22. Write `k6/Dockerfile` (FROM `grafana/k6`, scripts copied in) and `k6/scripts/reference-service/smoke.js` (few VUs, short duration, hits `reference-service.internal`, asserts status 200 + latency threshold); build and smoke-test the image locally against a local run of the Go service if practical.
 
 **CI/CD workflows (one task each)**
 - [ ] 23. `.github/workflows/terraform-scenario.yml` — reusable plan/apply workflow, generic on working-directory input.
