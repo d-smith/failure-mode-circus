@@ -39,6 +39,27 @@ locals {
   ]...)
 }
 
+# Classic Cloud Map service discovery, independent of Service Connect above -
+# a plain Route 53 private-hosted-zone A record any VPC resource can resolve,
+# for clients (like a standalone k6-runner RunTask) that can't enroll in
+# Service Connect's proxy-based DNS at all.
+resource "aws_service_discovery_service" "direct" {
+  count = var.cloudmap_namespace_id != null ? 1 : 0
+
+  name = coalesce(var.service_discovery_name, "${var.service_name}-direct")
+
+  dns_config {
+    namespace_id = var.cloudmap_namespace_id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+}
+
 resource "aws_ecs_task_definition" "this" {
   family                   = "${var.name_prefix}-${var.service_name}"
   requires_compatibilities = ["FARGATE"]
@@ -63,6 +84,13 @@ resource "aws_ecs_service" "this" {
     subnets          = var.subnet_ids
     security_groups  = concat([aws_security_group.service.id], var.extra_security_group_ids)
     assign_public_ip = false
+  }
+
+  dynamic "service_registries" {
+    for_each = var.cloudmap_namespace_id != null ? [1] : []
+    content {
+      registry_arn = aws_service_discovery_service.direct[0].arn
+    }
   }
 
   service_connect_configuration {
