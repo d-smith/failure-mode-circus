@@ -10,8 +10,8 @@ module "reference_service" {
   cluster_arn  = data.terraform_remote_state.hub.outputs.cluster_arn
 
   execution_role_arn = data.terraform_remote_state.hub.outputs.execution_role_arn
-  task_role_arn       = module.task_role.task_role_arns["reference-service"]
-  log_group_name      = data.terraform_remote_state.hub.outputs.log_group_names["reference-service"]
+  task_role_arn      = module.task_role.task_role_arns["reference-service"]
+  log_group_name     = data.terraform_remote_state.hub.outputs.log_group_names["reference-service"]
 
   containers = [
     {
@@ -38,6 +38,13 @@ module "reference_service" {
       discovery_name = "reference-service"
     }
   ]
+
+  # Classic Cloud Map registration alongside Service Connect above - gives
+  # reference-service-direct.internal, a plain DNS A record any VPC resource
+  # can resolve (the k6-runner RunTask can't use Service Connect's DNS at
+  # all; see the ecs-service module's cloudmap_namespace_id description).
+  cloudmap_namespace_id  = data.terraform_remote_state.hub.outputs.cloudmap_namespace_id
+  service_discovery_name = "reference-service-direct"
 
   tags = var.tags
 }

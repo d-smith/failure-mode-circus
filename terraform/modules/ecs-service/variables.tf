@@ -104,6 +104,18 @@ variable "service_connect_services" {
   default = []
 }
 
+variable "cloudmap_namespace_id" {
+  description = "Cloud Map private DNS namespace ID to register a classic AWS Cloud Map service discovery entry in, alongside Service Connect. Leave null (default) to skip. Needed for any client that can't use Service Connect - RunTask has no serviceConnectConfiguration parameter, so standalone tasks can't resolve Service Connect DNS names (those only resolve through the Envoy proxy injected into Service-Connect-enrolled tasks/services, confirmed via a live k6 RunTask DNS failure - not ordinary VPC-wide DNS)."
+  type        = string
+  default     = null
+}
+
+variable "service_discovery_name" {
+  description = "DNS label to register in Cloud Map, e.g. \"reference-service-direct\" -> reference-service-direct.internal. Deliberately meant to differ from any Service Connect discovery_name on the same service - the two are independent Cloud Map registrations, and reusing the same name risks colliding with the Cloud Map service ECS creates internally to back Service Connect. Defaults to \"$${service_name}-direct\" if unset. Only used when cloudmap_namespace_id is set. This is a plain A record with no port info (unlike Service Connect's alias) - callers must know the port separately."
+  type        = string
+  default     = null
+}
+
 variable "extra_security_group_ids" {
   description = "Additional security group IDs to attach to the service's tasks, beyond the one this module creates."
   type        = list(string)

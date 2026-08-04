@@ -926,3 +926,98 @@ workflow files are written. Next up is task 29: the end-to-end proof - open
 a PR touching the reference-service scenario, confirm plan-only jobs run
 clean, merge to main, watch apply -> build -> deploy -> k6 run execute, and
 confirm the pipeline goes green.
+
+## 2026-08-03 — Task 29 (first attempt): end-to-end proof surfaced three real bugs
+
+None of tasks 23-28's workflow YAML had ever been exercised for real (only
+YAML-syntax-checked) until this run - as expected, the very first live PR +
+merge surfaced genuine bugs, all now diagnosed and (mostly) fixed. Logging
+each since none were guessable from reading the Terraform/YAML alone; all
+three were only found via live AWS errors.
+
+1. OIDC trust policy sub-claim mismatch (Plan job, "Could not assume role
+   with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity").
+   Root cause found via CloudTrail (aws cloudtrail lookup-events on
+   AssumeRoleWithWebIdentity): GitHub sent
+   "repo:d-smith@758310/failure-mode-circus@1315382562:pull_request", not
+   the plain "repo:d-smith/failure-mode-circus:pull_request" the trust
+   policy expected. GitHub switches the sub claim to this
+   "owner@ownerId/repo@repoId" immutable-ID format once an account or repo
+   has ever been renamed, specifically to prevent a renamed-repo/org being
+   reclaimed by a new owner and inheriting old OIDC trust. Fix: updated
+   terraform/hub/variables.tf's github_repo default to
+   "d-smith@758310/failure-mode-circus@1315382562" (the exact observed
+   value) and terraform/modules/github-oidc-role/variables.tf's github_repo
+   description to warn future-us to verify against a live token rather than
+   assume the plain owner/repo form. Applied manually (same
+   manual-bootstrap-first-fix pattern as hub's original task-17 apply,
+   since terraform-hub.yml's own CI run depends on this same trust policy
+   being correct) - 2 resources changed (both OIDC roles' trust policies),
+   0 added/destroyed.
+
+2. logs:DescribeLogGroups AccessDenied during the same Plan job, one level
+   deeper (reading module.logging.aws_cloudwatch_log_group.this[...] once
+   OIDC worked). logs:DescribeLogGroups doesn't support resource-level
+   scoping the normal way - AWS evaluates it against a fixed "list all"
+   resource pattern (empty log-group segment in the ARN) rather than a
+   named log group ARN, so hub/oidc.tf's existing prefix-scoped
+   logs:*-on-/ecs/failure-mode-circus* statement never covered it. Fix:
+   added a new LogsDescribeAccountWide statement granting just
+   logs:DescribeLogGroups on resources = ["*"] - same category as the
+   already-existing account-wide ec2:*/ecs:*/servicediscovery:* statements,
+   for the same reason (this action just isn't meaningfully scopable).
+
+3. logs:ListTagsForResource AccessDenied, one plan attempt later. The
+   existing LogGroups statement's resource pattern
+   (.../log-group:/ecs/failure-mode-circus*:*) requires a literal ":"
+   character after the log group name before the final wildcard - but a
+   bare log-group ARN (arn:...:log-group:/ecs/failure-mode-circus/
+   reference-service, no trailing suffix at all) has no colon there, so it
+   never matched. Some CloudWatch Logs actions (ListTagsForResource,
+   DeleteLogGroup, PutRetentionPolicy, TagResource) need the bare ARN;
+   others need the ":*"-suffixed stream-level form. Fix: the LogGroups
+   statement's resources now lists both ARN forms.
+
+Both CloudWatch fixes were applied via the same manual
+terraform-plan-then-apply-in-hub cycle as fix 1, iterating one
+AccessDeniedException at a time as each surfaced.
+
+Once all three were fixed and re-applied, the PR's Plan job went green
+(2 checks passed, 7 correctly skipped - matching the plan-only-on-PR
+design). Merging triggered the full apply -> build -> deploy -> k6-run
+sequence as designed, and it all executed - but the k6 smoke test itself
+failed (checks_failed 100%, confirmed via `aws logs tail
+/ecs/failure-mode-circus/k6-runner`): every request errored with a DNS
+lookup failure, "lookup reference-service.internal on 10.0.0.2:53: no such
+host" - not a connectivity/security-group problem, a genuine NXDOMAIN from
+the VPC's own resolver.
+
+This disproves the design assumption written into task 26's progress entry
+and run-k6-task.yml's own header comment: that Service Connect DNS names
+are ordinary Route 53 private-hosted-zone records resolvable by any VPC
+resource regardless of Service Connect enrollment. They are not - Service
+Connect's DNS resolution works only through the Envoy sidecar proxy
+injected into tasks that are part of a Service-Connect-configured service
+or client; the standalone k6-runner RunTask never gets that proxy (RunTask
+still has no serviceConnectConfiguration parameter), so it has no path to
+resolve reference-service.internal at all. This is a real architectural gap
+in the current design, not a bug in the workflow YAML - caught by task 29's
+actual live run doing exactly the job it was meant to do.
+
+Decided fix (discussed with the user, chose over resolving the running
+task's IP at runtime via the ECS API and passing it as a BASE_URL
+container-override in run-k6-task.yml): add classic AWS Cloud Map service
+discovery (aws_service_discovery_service + service_registries) to
+reference-service's ECS service, alongside its existing Service Connect
+config. This publishes a real, plain-DNS-resolvable record any VPC
+resource can query, independent of the Envoy proxy, and generalizes to any
+future standalone-task client (not just this one k6 task) or to
+desired_count > 1 (load-balances across tasks, unlike a single
+runtime-resolved IP). Renumbered baseline-plan.md: inserted this as the new
+task 29 (classic service discovery), shifting the original 29-32 (end-to-end
+proof, scripts, docs, teardown verification) to 30-33 - the end-to-end
+proof needs a second real attempt once task 29 lands.
+
+Next up: task 29 (new numbering) - add classic Cloud Map service discovery
+to the ecs-service module and/or reference-service scenario, re-apply hub
+and/or the scenario, then re-attempt task 30 (the end-to-end proof) fresh.
