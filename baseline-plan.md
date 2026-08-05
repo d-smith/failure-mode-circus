@@ -114,11 +114,11 @@ Progress tracking: as each task below is completed and confirmed, check it off h
 - [x] 28. `.github/workflows/scenario-reference-service.yml` — orchestrator chaining tasks 23-26 for the reference-service scenario specifically.
 
 **End-to-end proof and wrap-up**
-- [ ] 29. Add classic AWS Cloud Map service discovery (`aws_service_discovery_service` + `service_registries`) to reference-service's ECS service, alongside its existing Service Connect config. Discovered via a live k6 task run (first attempt at task 30 below) that Service Connect DNS names (`reference-service.internal`) only resolve through the Envoy sidecar proxy injected into Service-Connect-configured tasks/services - not via plain VPC DNS - so the standalone k6-runner `RunTask` (which can't use Service Connect at all; `RunTask` has no `serviceConnectConfiguration` parameter) had no way to resolve it and every request failed DNS lookup. Classic service discovery publishes a real Route 53 private-hosted-zone record any VPC resource can resolve, independent of Service Connect's proxy.
-- [ ] 30. Open a PR touching the reference-service scenario, confirm plan-only jobs run clean; merge to main and watch apply → build → deploy → k6 run execute; confirm the k6 ECS task exits 0 and the pipeline goes green.
-- [ ] 31. Write `scripts/destroy-all.sh` (scenario stacks before hub) and `scripts/plan-all.sh`.
-- [ ] 32. Write `docs/architecture.md` (session lifecycle, cost notes, stable-outputs contract, "adding a new scenario" playbook) and `docs/adding-a-new-scenario.md`.
-- [ ] 33. Run the teardown verification: `terraform destroy` the reference-service scenario only, confirm hub/VPC/cluster/ECR remain untouched.
+- [x] 29. Add classic AWS Cloud Map service discovery (`aws_service_discovery_service` + `service_registries`) to reference-service's ECS service, alongside its existing Service Connect config. Discovered via a live k6 task run (first attempt at task 30 below) that Service Connect DNS names (`reference-service.internal`) only resolve through the Envoy sidecar proxy injected into Service-Connect-configured tasks/services - not via plain VPC DNS - so the standalone k6-runner `RunTask` (which can't use Service Connect at all; `RunTask` has no `serviceConnectConfiguration` parameter) had no way to resolve it and every request failed DNS lookup. Classic service discovery publishes a real Route 53 private-hosted-zone record any VPC resource can resolve, independent of Service Connect's proxy.
+- [x] 30. Open a PR touching the reference-service scenario, confirm plan-only jobs run clean; merge to main and watch apply → build → deploy → k6 run execute; confirm the k6 ECS task exits 0 and the pipeline goes green.
+- [x] 31. Write `scripts/destroy-all.sh` (scenario stacks before hub) and `scripts/plan-all.sh`.
+- [x] 32. Write `docs/architecture.md` (session lifecycle, cost notes, stable-outputs contract, "adding a new scenario" playbook) and `docs/adding-a-new-scenario.md`.
+- [x] 33. Run the teardown verification: `terraform destroy` the reference-service scenario only, confirm hub/VPC/cluster/ECR remain untouched.
 
 ## Verification
 

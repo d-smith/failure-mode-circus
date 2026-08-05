@@ -1021,3 +1021,171 @@ proof needs a second real attempt once task 29 lands.
 Next up: task 29 (new numbering) - add classic Cloud Map service discovery
 to the ecs-service module and/or reference-service scenario, re-apply hub
 and/or the scenario, then re-attempt task 30 (the end-to-end proof) fresh.
+
+## 2026-08-04 — Tasks 29-30: classic Cloud Map service discovery + successful end-to-end proof
+
+Added classic AWS Cloud Map service discovery to the ecs-service module,
+alongside its existing Service Connect config:
+
+- terraform/modules/ecs-service: new optional variables
+  cloudmap_namespace_id (default null - opt-in) and service_discovery_name
+  (defaults to "${service_name}-direct" if unset). When set, creates
+  aws_service_discovery_service.direct (plain type-A record, MULTIVALUE
+  routing, no health check - none of the extra Cloud Map cost knobs
+  needed) and wires it into aws_ecs_service.this via a dynamic
+  service_registries block. Deliberately a different Cloud Map service name
+  than any Service Connect discovery_name on the same service, since
+  reusing the same name in the same namespace would collide with the Cloud
+  Map service ECS creates internally to back Service Connect. New output:
+  service_discovery_name (the registered label; caller appends the known
+  namespace suffix itself, same convention Service Connect naming already
+  uses).
+- terraform/scenarios/reference-service/service.tf: passes
+  cloudmap_namespace_id = hub's existing cloudmap_namespace_id output,
+  service_discovery_name = "reference-service-direct" - so this coexists
+  with Service Connect's "reference-service.internal", not replacing it
+  (future Service-Connect-capable clients still get that name).
+- terraform/scenarios/reference-service/k6.tf: k6-runner container now sets
+  BASE_URL=http://reference-service-direct.internal:8080 as an environment
+  override, since smoke.js's own default (reference-service.internal)
+  would still hit the unresolvable Service Connect name.
+
+Caught and fixed one real bug before this ever reached a real terraform
+plan: an unescaped "${service_name}" inside the service_discovery_name
+variable's description string was being parsed as actual interpolation
+("Variables not allowed" / "value must be known" errors) - fixed by
+escaping to "$${service_name}". Ran `terraform fmt` + `terraform init
+-backend=false` + `terraform validate` on the ecs-service module directly
+(clean) to catch this before handing it off; couldn't do the same for the
+scenario module itself since it already has a real S3 backend initialized
+from earlier tasks and -backend=false conflicts with that cached state, so
+that one was eyeballed instead of tool-validated.
+
+User had already torn down (end of previous session) and re-recreated (start
+of this session, before this fix existed) both hub's VPC interface endpoints
+and the reference-service scenario - so this fix landed as an incremental
+`terraform apply` on top of an already-live (old-config) scenario, not a
+fresh create. Plan showed the expected addition
+(aws_service_discovery_service.direct) plus an in-place update to
+aws_ecs_service.this (add service_registries) - no destroy/replace. Applied
+successfully.
+
+Opened a PR with the module + scenario changes, merged it - this touched
+both terraform/modules/** (triggering terraform-hub.yml too, a no-op
+apply since hub doesn't consume ecs-service directly) and
+terraform/scenarios/reference-service/** (triggering
+scenario-reference-service.yml's full apply -> build -> deploy -> k6-run
+sequence). Verified via `aws logs tail /ecs/failure-mode-circus/k6-runner`:
+the k6 task successfully resolved reference-service-direct.internal this
+time and the smoke test passed clean.
+
+This completes tasks 29 and 30 - the end-to-end pipeline (PR plan-only ->
+merge -> apply -> build -> deploy -> k6 run -> exit 0) now genuinely works,
+proven live, not just YAML-valid. Next up: task 31,
+scripts/destroy-all.sh (scenario stacks before hub) and
+scripts/plan-all.sh.
+
+## 2026-08-04 — Task 31: scripts/destroy-all.sh + scripts/plan-all.sh
+
+Both scripts glob over terraform/scenarios/*/ so they generalize to future
+scenarios with no edits needed (same for_each-friendly spirit as hub's ECR
+module). Both deliberately exclude terraform/bootstrap - it's the one root
+module that stays local/manual (task 5), holding the S3 state bucket/
+DynamoDB lock table every other root module's backend depends on, so a
+script destroying or planning it would either be catastrophic (destroy) or
+only work on one specific machine (plan, since its state file is gitignored
+and local-only).
+
+destroy-all.sh: destroys every scenario first, then hub - scenarios depend
+on hub's networking/logging/ECR (no NAT Gateway, so a scenario's Fargate
+tasks need hub's endpoints to pull images/ship logs even while being torn
+down). Defaults to Terraform's normal interactive confirmation prompt for
+each destroy; accepts -y/--auto-approve to skip prompts for unattended runs.
+
+plan-all.sh: plans hub then every scenario, so drift across the whole repo
+can be checked in one command instead of cd-ing into each root module by
+hand.
+
+Both are `set -euo pipefail` bash, chmod +x'd. Syntax-checked with `bash -n`
+(both clean) - couldn't do a real end-to-end run of either since this
+session has no AWS credentials; logic was otherwise verified by reading
+against the actual terraform/hub and terraform/scenarios/reference-service
+directory structure.
+
+Removed the now-redundant scripts/.gitkeep.
+
+Next up: task 32, docs/architecture.md (session lifecycle, cost notes,
+stable-outputs contract, "adding a new scenario" playbook) and
+docs/adding-a-new-scenario.md.
+
+## 2026-08-04 — Task 32: docs/architecture.md + docs/adding-a-new-scenario.md
+
+docs/architecture.md sections: repo layers (bootstrap/hub/scenarios/modules/
+services/k6/workflows/scripts), session lifecycle (teardown/resume order and
+why, consolidating the reasoning behind README's existing cost-management
+walkthrough rather than duplicating its numbers), cost notes (VPC interface
+endpoints dominate, Cloud Map addition from tasks 29-30 is negligible),
+stable-outputs contract (all 11 current hub outputs tabulated with what each
+is for), networking/service discovery (the Service-Connect-vs-classic-
+Cloud-Map distinction discovered the hard way in tasks 29-30 - written up
+explicitly as a "rule of thumb" so the next scenario doesn't rediscover it
+by hitting the same DNS failure), k6 packaging, CI/CD pipeline (all 6
+workflow files, the hardcoded-default-role-ARN pattern and why, the OIDC
+immutable-ID sub-claim gotcha from task 29's debugging), and a short pointer
+to the new adding-a-new-scenario.md for the full playbook.
+
+docs/adding-a-new-scenario.md: 7-step playbook (extend hub's tfvars ->
+write the service -> write the scenario's Terraform root module -> write
+the k6 script -> first manual apply, expecting the image-doesn't-exist-yet
+hiccup reference-service itself hit in tasks 19-21 -> write the orchestrator
+workflow -> prove it end-to-end), written as a checklist referencing
+reference-service as the copy-from template throughout. Explicitly flags
+the Service-Connect-vs-classic-discovery decision at the exact step
+(service.tf) where a future scenario builder would otherwise miss it.
+
+Both files cross-reference each other and progress.txt/README.md rather
+than duplicating content (e.g. cost numbers stay only in README, the
+DNS-mechanism explanation stays only in architecture.md).
+
+Removed the now-redundant docs/.gitkeep.
+
+This completes task 32. Next up: task 33, the final teardown verification -
+`terraform destroy` the reference-service scenario only, confirm hub/VPC/
+cluster/ECR remain untouched.
+
+## 2026-08-04 — Task 33: teardown verification (with a near-miss worth recording)
+
+User ran `terraform destroy` in terraform/scenarios/reference-service/ -
+destroyed the reference_service module (task def + ECS service + security
+group), k6_runner module (task def + security group), the two per-scenario
+task roles, and the new aws_service_discovery_service.direct from task 29.
+
+Along the way, a second `terraform destroy` was run from
+terraform/hub/ by mistake (misread which directory was meant) - the plan
+reached the "Do you really want to destroy all resources?" interactive
+prompt showing all 25 of hub's resources (VPC, both subnets, all 4 VPC
+endpoints, ECS cluster, Cloud Map namespace, both ECR repos with their
+pushed images, both log groups, both OIDC IAM roles, the shared execution
+role) staged for destruction. Caught before confirming - never typed "yes",
+so nothing was actually destroyed. Flagged immediately as soon as the plan
+output was shared, given the blast radius (would have deleted the OIDC
+roles GitHub Actions itself authenticates as, among everything else).
+
+Silver lining: that plan output, since it showed real current AWS attribute
+values for every hub resource (not "does not exist"), doubled as direct
+confirmation that hub was completely untouched by the actual
+reference-service destroy - satisfying task 33's "confirm hub/VPC/cluster/
+ECR remain untouched" requirement, just via an unplanned route rather than
+the read-only aws-cli checks originally suggested.
+
+Confirmed the reference-service ECS service itself is gone: `aws ecs
+describe-services --cluster failure-mode-circus-cluster --services
+reference-service` returned status INACTIVE, runningCount 0.
+
+This completes task 33 - and with it, every task in baseline-plan.md (1-33).
+The reference-service scenario is a complete, working, end-to-end proof of
+the hub/spoke pattern: shared always-on infra in hub, an independently
+destroyable scenario stack, CI that plans on PR and applies/builds/deploys/
+smoke-tests on merge, real bugs found and fixed by actually running it
+rather than just reading the Terraform/YAML. docs/adding-a-new-scenario.md
+is the playbook for whatever scenario #2 turns out to be.
