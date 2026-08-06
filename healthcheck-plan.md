@@ -142,7 +142,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   }
   ```
 
-- [ ] **8. `terraform/scenarios/reference-service/service.tf` — turn it on
+- [x] **8. `terraform/scenarios/reference-service/service.tf` — turn it on
   for reference-service.** On the `reference-service` container entry,
   add:
   ```hcl
