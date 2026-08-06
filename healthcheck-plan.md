@@ -94,7 +94,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   healthcheck` exits 0/1; ECS invokes it via `["CMD", "/reference-service",
   "healthcheck"]` since the runtime image has no shell.
 
-- [ ] **5. Local verification before touching Terraform.**
+- [x] **5. Local verification before touching Terraform.**
   `go build -o reference-service . && ./reference-service`, then in
   another terminal:
   - `curl "localhost:8080/calc?op1=2&op2=3&operator=sub"` → `200`,

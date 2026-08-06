@@ -102,6 +102,22 @@ Updated `services/reference-service/README.md`:
 User reviewed and confirmed before this step was checked off. No code
 changes in this step.
 
-Not yet done: local/Docker verification (step 5), and everything
-Terraform/k6 (steps 6-12). `go build`/`docker build` have not been run
-against this code yet.
+Not yet done at that point: local/Docker verification (step 5), and
+everything Terraform/k6 (steps 6-12). `go build`/`docker build` had not
+been run against this code yet.
+
+## 2026-08-06 — Step 5: local + Docker verification
+
+No code changes — pure verification step. User ran the host build
+(`go build`, then `./reference-service` plus curl checks for add/sub/mul
+success, division-by-zero 400, invalid-operator 400, and `./reference-service
+healthcheck; echo $?` returning 0 while running / 1 once stopped), then the
+Docker build (`docker build`, `docker run`, curl against the container,
+`docker exec ... /reference-service healthcheck; echo $?` returning 0) —
+confirming the self-check subcommand actually works inside the real
+distroless runtime image, not just on the host. All confirmed passing.
+
+Not yet done: everything Terraform/k6 (steps 6-12) — the `health_check`
+input on the `ecs-service` module, wiring it on for `reference-service`,
+the k6 script rewrite, `terraform plan` review, shipping through CI/CD, and
+live post-deploy verification.
