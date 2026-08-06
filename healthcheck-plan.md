@@ -76,7 +76,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   the server: if `os.Args[1] == "healthcheck"`, call
   `os.Exit(runHealthcheck(addr))` and return.
 
-- [ ] **3. `services/reference-service/main_test.go` — tests.**
+- [x] **3. `services/reference-service/main_test.go` — tests.**
   Table-driven `TestCalcHandler`: add/sub/mul/div success (assert response
   JSON fields), unknown operator (400), non-numeric op1/op2 (400), missing
   params (400), non-GET method (405), division by zero (400, body mentions

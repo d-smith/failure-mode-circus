@@ -77,3 +77,14 @@ expected there.
 Not yet done: README updates (step 4), local/Docker verification (step 5),
 and everything Terraform/k6 (steps 6-12). `go build`/`docker build` have not
 been run against this code yet.
+
+## 2026-08-06 — Step 3: full test suite confirmation
+
+No new code — as noted above, both halves of this step's original scope
+were already written in steps 1 and 2. User ran `go test ./... -v` and
+confirmed the full suite (calc handler tests + healthcheck tests +
+pre-existing `TestHealthzHandler`) passes together.
+
+Not yet done: README updates (step 4), local/Docker verification (step 5),
+and everything Terraform/k6 (steps 6-12). `go build`/`docker build` have not
+been run against this code yet.
