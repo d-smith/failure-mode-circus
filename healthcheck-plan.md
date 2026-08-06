@@ -128,7 +128,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   detection within ~45-60s — fast enough to watch live in a demo, slow
   enough not to flap.
 
-- [ ] **7. `terraform/modules/ecs-service/main.tf` — wire it into the
+- [x] **7. `terraform/modules/ecs-service/main.tf` — wire it into the
   container definition.** In the `container_definitions` local, add
   (following the existing null-passthrough precedent already used for
   `cpu`/`command`/etc.):

@@ -143,7 +143,30 @@ to 15s/5s/3/10s per the plan's demo-friendly timing rationale. User
 reviewed and confirmed. No wiring into `main.tf`'s `container_definitions`
 yet — that's step 7.
 
-Not yet done: wiring this into `container_definitions` (step 7), turning it
-on for `reference-service` (step 8), the k6 script rewrite (step 9),
-`terraform plan` review (step 10), shipping through CI/CD (step 11), and
-live post-deploy verification (step 12).
+Not yet done at that point: wiring this into `container_definitions`
+(step 7), turning it on for `reference-service` (step 8), the k6 script
+rewrite (step 9), `terraform plan` review (step 10), shipping through
+CI/CD (step 11), and live post-deploy verification (step 12).
+
+## 2026-08-06 — Step 7: wire `health_check` into `container_definitions`
+
+In `terraform/modules/ecs-service/main.tf`, added a `healthCheck` entry to
+the `container_definitions` local, right after `portMappings`:
+```hcl
+healthCheck = c.health_check == null ? null : {
+  command     = c.health_check.command
+  interval    = c.health_check.interval
+  timeout     = c.health_check.timeout
+  retries     = c.health_check.retries
+  startPeriod = c.health_check.start_period
+}
+```
+`null` when a container has no `health_check` set (existing containers
+unaffected), otherwise maps the module's snake_case fields to ECS's
+camelCase `healthCheck` JSON shape (`start_period` → `startPeriod`). User
+reviewed and confirmed. Module now fully supports `health_check`, but no
+scenario has turned it on yet — that's step 8.
+
+Not yet done: turning it on for `reference-service` (step 8), the k6
+script rewrite (step 9), `terraform plan` review (step 10), shipping
+through CI/CD (step 11), and live post-deploy verification (step 12).
