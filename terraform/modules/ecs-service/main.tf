@@ -19,6 +19,13 @@ locals {
           appProtocol   = p.app_protocol
         }
       ]
+      healthCheck = c.health_check == null ? null : {
+        command     = c.health_check.command
+        interval    = c.health_check.interval
+        timeout     = c.health_check.timeout
+        retries     = c.health_check.retries
+        startPeriod = c.health_check.start_period
+      }
       logConfiguration = {
         logDriver = "awslogs"
         options = {
