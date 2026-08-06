@@ -74,10 +74,6 @@ Step 3 as written in the plan is effectively complete — just confirm
 `go test ./...` passes end-to-end and check it off, no new test code
 expected there.
 
-Not yet done: README updates (step 4), local/Docker verification (step 5),
-and everything Terraform/k6 (steps 6-12). `go build`/`docker build` have not
-been run against this code yet.
-
 ## 2026-08-06 — Step 3: full test suite confirmation
 
 No new code — as noted above, both halves of this step's original scope
@@ -85,6 +81,27 @@ were already written in steps 1 and 2. User ran `go test ./... -v` and
 confirmed the full suite (calc handler tests + healthcheck tests +
 pre-existing `TestHealthzHandler`) passes together.
 
-Not yet done: README updates (step 4), local/Docker verification (step 5),
-and everything Terraform/k6 (steps 6-12). `go build`/`docker build` have not
-been run against this code yet.
+Not yet done at that point: README updates (step 4), local/Docker
+verification (step 5), and everything Terraform/k6 (steps 6-12). `go
+build`/`docker build` had not been run against this code yet.
+
+## 2026-08-06 — Step 4: README updates
+
+Updated `services/reference-service/README.md`:
+- Top description line updated from "exposing a single health-check
+  endpoint" to "exposing a health-check endpoint and a small calculator
+  endpoint".
+- `## Endpoint` (singular) renamed to `## Endpoints`, keeping `/healthz`
+  and adding `/calc?op1=&op2=&operator=` with a success JSON example and
+  the three 400 error cases (non-numeric/missing operands, invalid
+  operator, division by zero) plus the 405-on-non-GET note.
+- New `## Health check` section explaining the `healthcheck` self-check
+  subcommand, why it exists (distroless image has no shell/curl/wget), and
+  the ECS `["CMD", "/reference-service", "healthcheck"]` invocation form.
+
+User reviewed and confirmed before this step was checked off. No code
+changes in this step.
+
+Not yet done: local/Docker verification (step 5), and everything
+Terraform/k6 (steps 6-12). `go build`/`docker build` have not been run
+against this code yet.

@@ -87,7 +87,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   address, expect 1). Run `go test ./...` in `services/reference-service`
   and confirm all pass before moving on.
 
-- [ ] **4. `services/reference-service/README.md` — docs.** New
+- [x] **4. `services/reference-service/README.md` — docs.** New
   `## Endpoints` section documenting `GET /calc?op1=&op2=&operator=` with
   example success and error responses (bad operator, bad operands,
   division by zero). New `## Health check` section: `./reference-service
