@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -123,5 +124,33 @@ func TestCalcHandlerMethodNotAllowed(t *testing.T) {
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestRunHealthcheckSuccess(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthzHandler)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	got := runHealthcheck(server.Listener.Addr().String())
+	if got != 0 {
+		t.Errorf("runHealthcheck() = %d, want 0", got)
+	}
+}
+
+func TestRunHealthcheckFailure(t *testing.T) {
+	// Reserve a free port, then release it immediately so nothing is
+	// listening there when runHealthcheck tries to reach it.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	got := runHealthcheck(addr)
+	if got != 1 {
+		t.Errorf("runHealthcheck() = %d, want 1", got)
 	}
 }

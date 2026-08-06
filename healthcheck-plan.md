@@ -66,7 +66,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   `{"op1":...,"op2":...,"operator":...,"result":...}`. Register the route
   in `main()`'s mux alongside `/healthz`.
 
-- [ ] **2. `services/reference-service/main.go` — `healthcheck` self-check
+- [x] **2. `services/reference-service/main.go` — `healthcheck` self-check
   mode.** `runHealthcheck(addr string) int`: derive the port from `addr`
   (the same value `LISTEN_ADDR` already resolves to) via
   `net.SplitHostPort` (fallback `8080`), GET

@@ -2,10 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
@@ -68,10 +71,33 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(calcResponse{Op1: op1, Op2: op2, Operator: operator, Result: result})
 }
 
+func runHealthcheck(addr string) int {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		port = "8080"
+	}
+
+	client := http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%s/healthz", port))
+	if err != nil {
+		return 1
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
+}
+
 func main() {
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {
 		addr = ":8080"
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheck(addr))
 	}
 
 	mux := http.NewServeMux()

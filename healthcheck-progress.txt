@@ -39,7 +39,41 @@ off.
 `TestRunHealthcheckFailure` for the `healthcheck` self-check mode (step 2),
 not redo the calc tests.
 
-Not yet done: `healthcheck` self-check subcommand (step 2), README updates
-(step 4), local/Docker verification (step 5), and everything Terraform/k6
-(steps 6-12). `go build`/`docker build` have not been run against this code
-yet — only `go test` for the handler.
+Not yet done at that point: `healthcheck` self-check subcommand (step 2),
+README updates (step 4), local/Docker verification (step 5), and everything
+Terraform/k6 (steps 6-12). `go build`/`docker build` had not been run against
+this code yet — only `go test` for the handler.
+
+## 2026-08-06 — Step 2: `healthcheck` self-check subcommand
+
+Added to `services/reference-service/main.go`:
+- `runHealthcheck(addr string) int`: parses the port out of `addr` via
+  `net.SplitHostPort` (falls back to `"8080"` if that fails or the port
+  comes back empty); does a GET to `http://127.0.0.1:<port>/healthz` with a
+  2-second-timeout `http.Client`; returns `1` on any request error or a
+  non-200 response, `0` otherwise.
+- `main()` now checks `os.Args[1] == "healthcheck"` (guarded by
+  `len(os.Args) > 1`) before starting the server, and if set calls
+  `os.Exit(runHealthcheck(addr))` — this is the entry point ECS's
+  `["CMD", "/reference-service", "healthcheck"]` container health check
+  will invoke once wired up in Terraform (step 6-8).
+- New imports: `fmt`, `net`, `time`.
+
+Also added tests (pulled forward from step 3, same reasoning as step 1) in
+`services/reference-service/main_test.go`: `TestRunHealthcheckSuccess`
+(spins an `httptest.NewServer` wrapping a `/healthz`-only mux, asserts
+`runHealthcheck` returns 0 against it) and `TestRunHealthcheckFailure`
+(reserves a free `127.0.0.1` port then immediately closes the listener so
+nothing answers, asserts `runHealthcheck` returns 1). New import: `net`.
+User ran `go test ./... -v` locally and confirmed all tests pass before
+this step was checked off.
+
+**Note for step 3 when resumed:** both halves of step 3's original scope
+(calc tests in step 1, healthcheck tests in step 2) are now already done.
+Step 3 as written in the plan is effectively complete — just confirm
+`go test ./...` passes end-to-end and check it off, no new test code
+expected there.
+
+Not yet done: README updates (step 4), local/Docker verification (step 5),
+and everything Terraform/k6 (steps 6-12). `go build`/`docker build` have not
+been run against this code yet.
