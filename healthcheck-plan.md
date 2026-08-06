@@ -110,7 +110,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   <container> /reference-service healthcheck; echo $?` to confirm it works
   inside the actual distroless runtime image (not just the host).
 
-- [ ] **6. `terraform/modules/ecs-service/variables.tf` — `health_check`
+- [x] **6. `terraform/modules/ecs-service/variables.tf` — `health_check`
   input.** Add an optional `health_check` field to the `containers` object
   type (same `optional(...)` style already used for `command`, `cpu`,
   etc.):

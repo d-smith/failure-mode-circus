@@ -117,7 +117,33 @@ Docker build (`docker build`, `docker run`, curl against the container,
 confirming the self-check subcommand actually works inside the real
 distroless runtime image, not just on the host. All confirmed passing.
 
-Not yet done: everything Terraform/k6 (steps 6-12) — the `health_check`
-input on the `ecs-service` module, wiring it on for `reference-service`,
-the k6 script rewrite, `terraform plan` review, shipping through CI/CD, and
-live post-deploy verification.
+Not yet done at that point: everything Terraform/k6 (steps 6-12) — the
+`health_check` input on the `ecs-service` module, wiring it on for
+`reference-service`, the k6 script rewrite, `terraform plan` review,
+shipping through CI/CD, and live post-deploy verification.
+
+## 2026-08-06 — Step 6: `ecs-service` module `health_check` input
+
+Added an optional `health_check` field to each entry of the `containers`
+object-list variable in `terraform/modules/ecs-service/variables.tf`
+(same `optional(...)` style already used for `command`/`cpu`/etc.):
+```hcl
+health_check = optional(object({
+  command      = list(string)
+  interval     = optional(number, 15)
+  timeout      = optional(number, 5)
+  retries      = optional(number, 3)
+  start_period = optional(number, 10)
+}), null)
+```
+Defaults to `null` overall, so existing container entries without a
+`health_check` block are unaffected. `command` is required when the block
+is set (no sensible default); interval/timeout/retries/start_period default
+to 15s/5s/3/10s per the plan's demo-friendly timing rationale. User
+reviewed and confirmed. No wiring into `main.tf`'s `container_definitions`
+yet — that's step 7.
+
+Not yet done: wiring this into `container_definitions` (step 7), turning it
+on for `reference-service` (step 8), the k6 script rewrite (step 9),
+`terraform plan` review (step 10), shipping through CI/CD (step 11), and
+live post-deploy verification (step 12).

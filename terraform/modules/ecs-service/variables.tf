@@ -67,6 +67,13 @@ variable "containers" {
       name           = optional(string)
       app_protocol   = optional(string, "http")
     })), [])
+    health_check = optional(object({
+      command      = list(string)
+      interval     = optional(number, 15)
+      timeout      = optional(number, 5)
+      retries      = optional(number, 3)
+      start_period = optional(number, 10)
+    }), null)
   }))
 }
 
