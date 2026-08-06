@@ -187,6 +187,29 @@ code/config change needed before touching Terraform state — steps 9-12 are
 the k6 script rewrite, `terraform plan` review, shipping through CI/CD, and
 live post-deploy verification.
 
-Not yet done: the k6 script rewrite (step 9), `terraform plan` review
-(step 10), shipping through CI/CD (step 11), and live post-deploy
-verification (step 12).
+Not yet done at that point: the k6 script rewrite (step 9), `terraform
+plan` review (step 10), shipping through CI/CD (step 11), and live
+post-deploy verification (step 12).
+
+## 2026-08-06 — Step 9: k6 `smoke.js` rewritten for `/calc`
+
+Rewrote `k6/scripts/reference-service/smoke.js`: added `OPERATORS =
+['add','sub','mul','div']`, a `randomInt(max)` helper, and an
+`expectedResult(op1, op2, operator)` helper mirroring the service's own
+calc logic. Each iteration now picks `op1`/`op2` as random ints 0-20 and a
+random operator, calls `GET /calc?op1=&op2=&operator=`, and branches the
+assertion: if `operator === 'div' && op2 === 0`, checks only `status ===
+400`; otherwise checks both `status === 200` and `Math.abs(r.json().result
+- expected) < 1e-9`. Dropped the old `/healthz`-based check entirely —
+ECS now owns liveness via the container health check (steps 6-8), and every
+`/calc` call already proves the service is up. `options` (3 VUs, 30s,
+`http_req_duration p(95)<500`, `checks rate>0.99`) unchanged. User reviewed
+and confirmed.
+
+This was the last code/script change in the plan. Remaining steps
+(10-12) are `terraform plan` review, shipping through the existing CI/CD
+pipeline, and live post-deploy verification — no more source edits
+expected, only running things and observing results.
+
+Not yet done: `terraform plan` review (step 10), shipping through CI/CD
+(step 11), and live post-deploy verification (step 12).

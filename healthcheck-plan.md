@@ -152,7 +152,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   ```
   (module defaults used for interval/timeout/retries/start_period).
 
-- [ ] **9. `k6/scripts/reference-service/smoke.js` — randomized `/calc`
+- [x] **9. `k6/scripts/reference-service/smoke.js` — randomized `/calc`
   calls.** Rewrite the iteration body: pick `op1`/`op2` as random integers
   0-20 (naturally includes 0 sometimes, so division-by-zero gets exercised
   without special-casing it) and `operator` randomly from
