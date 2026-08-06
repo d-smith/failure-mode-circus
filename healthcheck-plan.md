@@ -165,7 +165,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   `400` on division-by-zero passes its own check rather than counting as a
   failure. Drop the old `/healthz`-based check block entirely.
 
-- [ ] **10. `terraform plan` review.** Run `terraform plan` in
+- [x] **10. `terraform plan` review.** Run `terraform plan` in
   `terraform/scenarios/reference-service` (user runs this, per standing
   preference — Claude gives the command and explains what to expect, does
   not execute). Expect an additive task-definition revision (new
