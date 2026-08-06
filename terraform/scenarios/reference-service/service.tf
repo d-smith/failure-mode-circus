@@ -24,6 +24,9 @@ module "reference_service" {
           name           = "http"
         }
       ]
+      health_check = {
+        command = ["CMD", "/reference-service", "healthcheck"]
+      }
     }
   ]
 

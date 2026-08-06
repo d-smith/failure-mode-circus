@@ -1,0 +1,234 @@
+healthcheck-plan.md — Progress Log
+
+Format: one entry per completed step from healthcheck-plan.md, dated, noting what
+was done and any deviations/decisions worth remembering.
+
+## 2026-08-06 — Step 1: `/calc` handler
+
+Added to `services/reference-service/main.go`:
+- `calcResponse` (op1, op2, operator, result — all JSON-tagged) and
+  `errorResponse` (error) types.
+- `writeJSONError(w, status, msg)` helper — sets `Content-Type:
+  application/json`, writes the status, encodes `errorResponse`.
+- `calcHandler(w, r)`: rejects non-GET with 405; parses `op1`/`op2` query
+  params via `strconv.ParseFloat` (400 on failure — covers non-numeric and
+  missing params, since an empty string also fails to parse); switches on
+  `operator` (`add`/`sub`/`mul`/`div`, 400 on unknown value); for `div`,
+  checks `op2 == 0` before dividing and returns 400 with an error message
+  containing "division by zero"; success returns 200 JSON.
+- Registered `/calc` on the mux in `main()` alongside `/healthz`.
+
+Deviation from plan wording: error message text landed as "op1 and op2 must
+be numeric" / "operator must be one of add, sub, mul, div" / "division by
+zero" / "method not allowed" — matches the plan's intent, exact wording is
+implementation-owned and not repeated verbatim from the plan doc.
+
+Also added (originally scoped to step 3, but user asked for runnable unit
+tests before checking off step 1, so pulled forward for just the `/calc`
+handler): `TestCalcHandlerSuccess` (table-driven over add/sub/mul/div),
+`TestCalcHandlerDivideByZero`, `TestCalcHandlerInvalidOperator`,
+`TestCalcHandlerInvalidOperands` (non-numeric op1, non-numeric op2, missing
+op1, missing op2), `TestCalcHandlerMethodNotAllowed` — all in
+`services/reference-service/main_test.go`, following the existing
+`httptest.NewRequest`/`httptest.NewRecorder` direct-handler-call pattern.
+User ran these locally and confirmed passing before this step was checked
+off.
+
+**Note for step 3 when resumed:** the calc-handler tests above already exist
+— step 3 at that point only needs to add `TestRunHealthcheckSuccess` /
+`TestRunHealthcheckFailure` for the `healthcheck` self-check mode (step 2),
+not redo the calc tests.
+
+Not yet done at that point: `healthcheck` self-check subcommand (step 2),
+README updates (step 4), local/Docker verification (step 5), and everything
+Terraform/k6 (steps 6-12). `go build`/`docker build` had not been run against
+this code yet — only `go test` for the handler.
+
+## 2026-08-06 — Step 2: `healthcheck` self-check subcommand
+
+Added to `services/reference-service/main.go`:
+- `runHealthcheck(addr string) int`: parses the port out of `addr` via
+  `net.SplitHostPort` (falls back to `"8080"` if that fails or the port
+  comes back empty); does a GET to `http://127.0.0.1:<port>/healthz` with a
+  2-second-timeout `http.Client`; returns `1` on any request error or a
+  non-200 response, `0` otherwise.
+- `main()` now checks `os.Args[1] == "healthcheck"` (guarded by
+  `len(os.Args) > 1`) before starting the server, and if set calls
+  `os.Exit(runHealthcheck(addr))` — this is the entry point ECS's
+  `["CMD", "/reference-service", "healthcheck"]` container health check
+  will invoke once wired up in Terraform (step 6-8).
+- New imports: `fmt`, `net`, `time`.
+
+Also added tests (pulled forward from step 3, same reasoning as step 1) in
+`services/reference-service/main_test.go`: `TestRunHealthcheckSuccess`
+(spins an `httptest.NewServer` wrapping a `/healthz`-only mux, asserts
+`runHealthcheck` returns 0 against it) and `TestRunHealthcheckFailure`
+(reserves a free `127.0.0.1` port then immediately closes the listener so
+nothing answers, asserts `runHealthcheck` returns 1). New import: `net`.
+User ran `go test ./... -v` locally and confirmed all tests pass before
+this step was checked off.
+
+**Note for step 3 when resumed:** both halves of step 3's original scope
+(calc tests in step 1, healthcheck tests in step 2) are now already done.
+Step 3 as written in the plan is effectively complete — just confirm
+`go test ./...` passes end-to-end and check it off, no new test code
+expected there.
+
+## 2026-08-06 — Step 3: full test suite confirmation
+
+No new code — as noted above, both halves of this step's original scope
+were already written in steps 1 and 2. User ran `go test ./... -v` and
+confirmed the full suite (calc handler tests + healthcheck tests +
+pre-existing `TestHealthzHandler`) passes together.
+
+Not yet done at that point: README updates (step 4), local/Docker
+verification (step 5), and everything Terraform/k6 (steps 6-12). `go
+build`/`docker build` had not been run against this code yet.
+
+## 2026-08-06 — Step 4: README updates
+
+Updated `services/reference-service/README.md`:
+- Top description line updated from "exposing a single health-check
+  endpoint" to "exposing a health-check endpoint and a small calculator
+  endpoint".
+- `## Endpoint` (singular) renamed to `## Endpoints`, keeping `/healthz`
+  and adding `/calc?op1=&op2=&operator=` with a success JSON example and
+  the three 400 error cases (non-numeric/missing operands, invalid
+  operator, division by zero) plus the 405-on-non-GET note.
+- New `## Health check` section explaining the `healthcheck` self-check
+  subcommand, why it exists (distroless image has no shell/curl/wget), and
+  the ECS `["CMD", "/reference-service", "healthcheck"]` invocation form.
+
+User reviewed and confirmed before this step was checked off. No code
+changes in this step.
+
+Not yet done at that point: local/Docker verification (step 5), and
+everything Terraform/k6 (steps 6-12). `go build`/`docker build` had not
+been run against this code yet.
+
+## 2026-08-06 — Step 5: local + Docker verification
+
+No code changes — pure verification step. User ran the host build
+(`go build`, then `./reference-service` plus curl checks for add/sub/mul
+success, division-by-zero 400, invalid-operator 400, and `./reference-service
+healthcheck; echo $?` returning 0 while running / 1 once stopped), then the
+Docker build (`docker build`, `docker run`, curl against the container,
+`docker exec ... /reference-service healthcheck; echo $?` returning 0) —
+confirming the self-check subcommand actually works inside the real
+distroless runtime image, not just on the host. All confirmed passing.
+
+Not yet done at that point: everything Terraform/k6 (steps 6-12) — the
+`health_check` input on the `ecs-service` module, wiring it on for
+`reference-service`, the k6 script rewrite, `terraform plan` review,
+shipping through CI/CD, and live post-deploy verification.
+
+## 2026-08-06 — Step 6: `ecs-service` module `health_check` input
+
+Added an optional `health_check` field to each entry of the `containers`
+object-list variable in `terraform/modules/ecs-service/variables.tf`
+(same `optional(...)` style already used for `command`/`cpu`/etc.):
+```hcl
+health_check = optional(object({
+  command      = list(string)
+  interval     = optional(number, 15)
+  timeout      = optional(number, 5)
+  retries      = optional(number, 3)
+  start_period = optional(number, 10)
+}), null)
+```
+Defaults to `null` overall, so existing container entries without a
+`health_check` block are unaffected. `command` is required when the block
+is set (no sensible default); interval/timeout/retries/start_period default
+to 15s/5s/3/10s per the plan's demo-friendly timing rationale. User
+reviewed and confirmed. No wiring into `main.tf`'s `container_definitions`
+yet — that's step 7.
+
+Not yet done at that point: wiring this into `container_definitions`
+(step 7), turning it on for `reference-service` (step 8), the k6 script
+rewrite (step 9), `terraform plan` review (step 10), shipping through
+CI/CD (step 11), and live post-deploy verification (step 12).
+
+## 2026-08-06 — Step 7: wire `health_check` into `container_definitions`
+
+In `terraform/modules/ecs-service/main.tf`, added a `healthCheck` entry to
+the `container_definitions` local, right after `portMappings`:
+```hcl
+healthCheck = c.health_check == null ? null : {
+  command     = c.health_check.command
+  interval    = c.health_check.interval
+  timeout     = c.health_check.timeout
+  retries     = c.health_check.retries
+  startPeriod = c.health_check.start_period
+}
+```
+`null` when a container has no `health_check` set (existing containers
+unaffected), otherwise maps the module's snake_case fields to ECS's
+camelCase `healthCheck` JSON shape (`start_period` → `startPeriod`). User
+reviewed and confirmed. Module now fully supports `health_check`, but no
+scenario has turned it on yet — that's step 8.
+
+Not yet done at that point: turning it on for `reference-service` (step 8),
+the k6 script rewrite (step 9), `terraform plan` review (step 10),
+shipping through CI/CD (step 11), and live post-deploy verification
+(step 12).
+
+## 2026-08-06 — Step 8: turn `health_check` on for `reference-service`
+
+In `terraform/scenarios/reference-service/service.tf`, added to the
+`reference-service` container entry:
+```hcl
+health_check = {
+  command = ["CMD", "/reference-service", "healthcheck"]
+}
+```
+Module defaults used for interval (15s)/timeout (5s)/retries (3)/start_period
+(10s) — not overridden. User reviewed and confirmed. This is the last
+code/config change needed before touching Terraform state — steps 9-12 are
+the k6 script rewrite, `terraform plan` review, shipping through CI/CD, and
+live post-deploy verification.
+
+Not yet done at that point: the k6 script rewrite (step 9), `terraform
+plan` review (step 10), shipping through CI/CD (step 11), and live
+post-deploy verification (step 12).
+
+## 2026-08-06 — Step 9: k6 `smoke.js` rewritten for `/calc`
+
+Rewrote `k6/scripts/reference-service/smoke.js`: added `OPERATORS =
+['add','sub','mul','div']`, a `randomInt(max)` helper, and an
+`expectedResult(op1, op2, operator)` helper mirroring the service's own
+calc logic. Each iteration now picks `op1`/`op2` as random ints 0-20 and a
+random operator, calls `GET /calc?op1=&op2=&operator=`, and branches the
+assertion: if `operator === 'div' && op2 === 0`, checks only `status ===
+400`; otherwise checks both `status === 200` and `Math.abs(r.json().result
+- expected) < 1e-9`. Dropped the old `/healthz`-based check entirely —
+ECS now owns liveness via the container health check (steps 6-8), and every
+`/calc` call already proves the service is up. `options` (3 VUs, 30s,
+`http_req_duration p(95)<500`, `checks rate>0.99`) unchanged. User reviewed
+and confirmed.
+
+This was the last code/script change in the plan. Remaining steps
+(10-12) are `terraform plan` review, shipping through the existing CI/CD
+pipeline, and live post-deploy verification — no more source edits
+expected, only running things and observing results.
+
+Not yet done at that point: `terraform plan` review (step 10), shipping
+through CI/CD (step 11), and live post-deploy verification (step 12).
+
+## 2026-08-06 — Step 10: `terraform plan` review
+
+User had previously `terraform destroy`'d the reference-service scenario
+(unrelated to this plan), so `terraform plan` in
+`terraform/scenarios/reference-service` showed a full create for the whole
+stack rather than an in-place diff — expected, not a sign of anything
+wrong, since the scenario didn't exist to diff against. Hub's remote state
+read succeeded (hub is still up), so only the scenario-level resources are
+being (re)created. User confirmed the `aws_ecs_task_definition.this`
+resource's `container_definitions` JSON includes the expected `healthCheck`
+block (`command: ["CMD", "/reference-service", "healthcheck"]`, interval
+15/timeout 5/retries 3/startPeriod 10).
+
+Not yet applied — that happens as part of step 11 (shipping through the
+normal CI/CD pipeline via PR/merge, not a manual local apply).
+
+Not yet done: shipping through CI/CD (step 11), and live post-deploy
+verification (step 12).

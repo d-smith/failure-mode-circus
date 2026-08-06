@@ -1,13 +1,42 @@
 # reference-service
 
-Minimal Go HTTP service exposing a single health-check endpoint, used as the
-first workload deployed through the failure-mode-circus CI/CD pipeline
-(build → push → deploy → k6 smoke test) before any real failure-mode
-scenario is built.
+Minimal Go HTTP service exposing a health-check endpoint and a small
+calculator endpoint, used as the first workload deployed through the
+failure-mode-circus CI/CD pipeline (build → push → deploy → k6 smoke test)
+before any real failure-mode scenario is built.
 
-## Endpoint
+## Endpoints
 
 - `GET /healthz` — returns `200 OK` with body `ok`.
+
+- `GET /calc?op1=<number>&op2=<number>&operator=<add|sub|mul|div>` —
+  applies `operator` to `op1` and `op2` as `op1 operator op2` and returns
+  JSON.
+
+  Success (`200`):
+  ```json
+  {"op1": 2, "op2": 3, "operator": "sub", "result": -1}
+  ```
+
+  Errors (`400`), body `{"error": "<message>"}`:
+  - `op1`/`op2` missing or not numeric — `"op1 and op2 must be numeric"`
+  - `operator` not one of `add`, `sub`, `mul`, `div` — `"operator must be
+    one of add, sub, mul, div"`
+  - `operator=div` with `op2=0` — `"division by zero"`
+
+  Any method other than `GET` returns `405`.
+
+## Health check
+
+`./reference-service healthcheck` runs a one-shot self-check instead of
+starting the server: it makes an HTTP GET to its own `/healthz` and exits
+`0` if that returns `200`, `1` otherwise.
+
+This exists because the runtime image
+(`gcr.io/distroless/static-debian12`, see below) has no shell, no curl, and
+no wget, so a standard `CMD-SHELL curl -f ... || exit 1` container health
+check isn't possible. ECS instead execs the binary directly via the `CMD`
+form: `["CMD", "/reference-service", "healthcheck"]`.
 
 ## Configuration
 
