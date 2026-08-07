@@ -260,4 +260,32 @@ Also noted: `services/reference-service/README.md` picked up an extra
 some point during this stretch (external edit, not part of this plan's
 step 4 work) — left as-is, not reverted.
 
-Not yet done: live post-deploy verification (step 12).
+Not yet done at that point: live post-deploy verification (step 12).
+
+## 2026-08-07 — Step 12: live post-deploy verification
+
+User ran both checks against the deployed reference-service:
+- `aws ecs describe-tasks` (via `list-tasks` to find the running task ARN
+  first) on cluster `failure-mode-circus-cluster`, confirming
+  `healthStatus: HEALTHY`.
+- `aws logs tail /ecs/failure-mode-circus/k6-runner --since 1h`, confirming
+  the smoke-test run's `checks`/`http_req_duration` thresholds passed,
+  including iterations that hit the randomized division-by-zero branch
+  (400, correctly not counted as a failure).
+
+Both confirmed good. **All 12 steps of `healthcheck-plan.md` are now
+complete.**
+
+## 2026-08-07 — Follow-up (outside the 12-step plan): document post-deploy health check verification
+
+Since this was the first scenario in the project to use an ECS container
+`health_check`, there was no existing documentation for checking
+`healthStatus` post-deploy (only the pre-existing `aws logs tail`
+k6-output pattern in `docs/adding-a-new-scenario.md` section 7). Added a
+note right after that existing guidance: the `list-tasks` +
+`describe-tasks` --query 'tasks[0].{status:lastStatus,health:healthStatus}'`
+pattern, when a scenario's `containers` entries set `health_check`, noting
+`HEALTHY` is expected once `start_period` + a couple `interval`s elapse and
+that this checks ECS's own verdict, separate from k6's pass/fail. User
+reviewed and confirmed. Not tied to a `healthcheck-plan.md` checkbox since
+it was raised after the plan's 12 steps were already finished.

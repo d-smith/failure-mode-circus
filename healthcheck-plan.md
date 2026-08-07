@@ -178,7 +178,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   same proven pipeline the baseline reference-service went through — no
   new workflow changes needed.
 
-- [ ] **12. Live verification after deploy.**
+- [x] **12. Live verification after deploy.**
   - `aws ecs describe-tasks` on the running reference-service task —
     confirm `healthStatus` reports `HEALTHY` once the start period elapses.
   - Check the k6 smoke-test run's logs/exit code — confirm `checks` and
