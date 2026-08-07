@@ -17,6 +17,13 @@ on:
       - "terraform/scenarios/reference-service/**"
       - "services/reference-service/**"
       - "k6/**"
+  # Manual escape hatch for rebuilding after everything's been destroyed (or
+  # a dropped webhook, e.g. during a GitHub Actions outage) with no file
+  # changes to force a fresh push event. Always runs the full apply -> build
+  # -> deploy -> k6 run chain, same as a push to main - hub must already be
+  # applied first (this workflow only reads hub's outputs, it doesn't
+  # rebuild them).
+  workflow_dispatch: {}
 
 permissions:
   id-token: write
@@ -32,7 +39,7 @@ jobs:
     uses: ./.github/workflows/terraform-scenario.yml
     with:
       working-directory: terraform/scenarios/reference-service
-      apply: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      apply: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
 
   # Only runs on merge to main - PRs stop after the plan-only terraform job
   # above. Reads the dynamic (AWS-assigned) values later jobs need - subnet
@@ -44,7 +51,7 @@ jobs:
   read-outputs:
     name: Read Terraform outputs
     needs: terraform
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       cluster-arn: ${{ steps.hub.outputs.cluster-arn }}
@@ -81,7 +88,7 @@ jobs:
   build-reference-service:
     name: Build reference-service image
     needs: terraform
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/build-and-push.yml
     with:
       context: services/reference-service
@@ -90,7 +97,7 @@ jobs:
   build-k6-runner:
     name: Build k6-runner image
     needs: terraform
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/build-and-push.yml
     with:
       context: k6
@@ -99,7 +106,7 @@ jobs:
   deploy-reference-service:
     name: Deploy reference-service
     needs: [read-outputs, build-reference-service]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/deploy-service.yml
     with:
       cluster: ${{ needs.read-outputs.outputs.cluster-arn }}
@@ -118,7 +125,7 @@ jobs:
   run-k6-smoke-test:
     name: Run k6 smoke test
     needs: [read-outputs, build-k6-runner, deploy-reference-service]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/run-k6-task.yml
     with:
       cluster: ${{ needs.read-outputs.outputs.cluster-arn }}
