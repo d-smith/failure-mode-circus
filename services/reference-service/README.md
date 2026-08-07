@@ -47,6 +47,10 @@ form: `["CMD", "/reference-service", "healthcheck"]`.
 Requires Go 1.26+.
 
 ```bash
+go test ./... -v
+```
+
+```bash
 go build -o reference-service .
 ./reference-service
 ```
