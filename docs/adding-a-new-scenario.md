@@ -103,3 +103,24 @@ clean pass, not just a green Actions checkmark - a DNS or permissions
 problem can still show up as a real k6 failure even if every workflow step
 itself succeeds (this happened during `reference-service`'s own first
 end-to-end run; see `progress.txt`, tasks 29-30, for the full diagnosis).
+
+If the scenario's `containers` entries set `health_check` (see the
+`ecs-service` module), also confirm ECS's own verdict on the running
+task, separate from k6's pass/fail:
+
+```
+TASK_ARN=$(aws ecs list-tasks --cluster failure-mode-circus-cluster \
+  --service-name <name> --query 'taskArns[0]' --output text)
+
+aws ecs describe-tasks --cluster failure-mode-circus-cluster \
+  --tasks "$TASK_ARN" \
+  --query 'tasks[0].{status:lastStatus,health:healthStatus}'
+```
+
+Expect `healthStatus: HEALTHY` once the configured `start_period` and a
+couple of `interval`s have elapsed (`UNKNOWN` briefly right after a fresh
+deploy is normal). This is what actually gates whether ECS considers a
+task healthy - k6 checks prove the API behaves correctly, this proves ECS
+itself agrees the container is alive (`reference-service`'s `/calc` +
+`healthcheck` self-check subcommand, added after the baseline plan, is the
+first scenario to use this).

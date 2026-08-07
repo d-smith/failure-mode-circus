@@ -230,5 +230,34 @@ block (`command: ["CMD", "/reference-service", "healthcheck"]`, interval
 Not yet applied — that happens as part of step 11 (shipping through the
 normal CI/CD pipeline via PR/merge, not a manual local apply).
 
-Not yet done: shipping through CI/CD (step 11), and live post-deploy
-verification (step 12).
+Not yet done at that point: shipping through CI/CD (step 11), and live
+post-deploy verification (step 12).
+
+## 2026-08-07 — Step 11: shipped through CI/CD
+
+PR #4 (`feature/health-check` → `main`) merged (`9fb2e43`). Path filters on
+`scenario-reference-service.yml` (`terraform/scenarios/reference-service/**`,
+`services/reference-service/**`, `k6/**`) all matched the changed files, so
+the merge should have triggered the push-based apply pipeline normally.
+
+Detour: a major GitHub Actions platform outage (began ~2026-08-06 15:22
+UTC, confirmed via githubstatus.com) hit right around this merge —
+constrained runner capacity, delayed/failed jobs, and in this case the
+push webhook appears to have been dropped entirely rather than queued (no
+run ever appeared for the merge commit). Recovered by manually kicking off
+the workflow once GitHub Actions was healthy again — not a repo config
+issue, no code changes were needed. Noted as a possible future improvement
+(not part of this plan): add a `workflow_dispatch:` trigger to
+`scenario-reference-service.yml` so a manual re-run doesn't require
+crafting a new push when this happens again.
+
+User confirmed the manually-kicked-off run completed successfully
+(terraform apply → build/push both images → deploy → k6 smoke test all
+green).
+
+Also noted: `services/reference-service/README.md` picked up an extra
+`go test ./... -v` snippet ahead of the existing build/run instructions at
+some point during this stretch (external edit, not part of this plan's
+step 4 work) — left as-is, not reverted.
+
+Not yet done: live post-deploy verification (step 12).

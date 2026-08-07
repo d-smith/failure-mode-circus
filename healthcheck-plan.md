@@ -171,7 +171,7 @@ any notes logged along the way, and pick up at the first unchecked step.
   not execute). Expect an additive task-definition revision (new
   `healthCheck` block), no destroy/replace of the running service.
 
-- [ ] **11. Ship it through the normal pipeline.** Commit, push, open a PR
+- [x] **11. Ship it through the normal pipeline.** Commit, push, open a PR
   (user handles all git operations). Merging triggers the existing CI/CD
   pipeline (`scenario-reference-service.yml`): terraform apply → build +
   push both images → deploy → run the updated k6 smoke test. This is the
