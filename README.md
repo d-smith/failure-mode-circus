@@ -26,7 +26,7 @@ build plan and `progress.txt` for what's been done so far.
 ## Non-software prerequisites
 
 - An AWS account in which to create the `us-east-1` resources described in `baseline-plan.md`.
-- Local AWS credentials configured (`aws configure`, environment variables, or an SSO profile) with permissions sufficient for the one-time manual applies of `terraform/bootstrap` and `terraform/hub`.
+- Local AWS credentials configured (`aws configure`, environment variables, or an SSO profile set up via IAM Identity Center) with permissions sufficient for the one-time manual applies of `terraform/bootstrap` and `terraform/hub`.
 - A GitHub account with rights to create/push to `d-smith/failure-mode-circus`.
 
 ## Running the k6 smoke test locally
