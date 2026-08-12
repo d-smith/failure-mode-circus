@@ -7,13 +7,15 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHealthzHandler(t *testing.T) {
+	state := newServiceState(0, 0)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 
-	healthzHandler(rec, req)
+	state.healthzHandler(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -25,10 +27,10 @@ func TestHealthzHandler(t *testing.T) {
 
 func TestCalcHandlerSuccess(t *testing.T) {
 	cases := []struct {
-		name           string
-		op1, op2       string
-		operator       string
-		wantResult     float64
+		name       string
+		op1, op2   string
+		operator   string
+		wantResult float64
 	}{
 		{"add", "2", "3", "add", 5},
 		{"sub", "2", "3", "sub", -1},
@@ -38,10 +40,11 @@ func TestCalcHandlerSuccess(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			state := newServiceState(0, 0)
 			req := httptest.NewRequest(http.MethodGet, "/calc?op1="+tc.op1+"&op2="+tc.op2+"&operator="+tc.operator, nil)
 			rec := httptest.NewRecorder()
 
-			calcHandler(rec, req)
+			state.calcHandler(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusOK, rec.Body.String())
@@ -62,10 +65,11 @@ func TestCalcHandlerSuccess(t *testing.T) {
 }
 
 func TestCalcHandlerDivideByZero(t *testing.T) {
+	state := newServiceState(0, 0)
 	req := httptest.NewRequest(http.MethodGet, "/calc?op1=1&op2=0&operator=div", nil)
 	rec := httptest.NewRecorder()
 
-	calcHandler(rec, req)
+	state.calcHandler(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -81,10 +85,11 @@ func TestCalcHandlerDivideByZero(t *testing.T) {
 }
 
 func TestCalcHandlerInvalidOperator(t *testing.T) {
+	state := newServiceState(0, 0)
 	req := httptest.NewRequest(http.MethodGet, "/calc?op1=1&op2=2&operator=xyz", nil)
 	rec := httptest.NewRecorder()
 
-	calcHandler(rec, req)
+	state.calcHandler(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -104,10 +109,11 @@ func TestCalcHandlerInvalidOperands(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			state := newServiceState(0, 0)
 			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
 			rec := httptest.NewRecorder()
 
-			calcHandler(rec, req)
+			state.calcHandler(rec, req)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -117,19 +123,117 @@ func TestCalcHandlerInvalidOperands(t *testing.T) {
 }
 
 func TestCalcHandlerMethodNotAllowed(t *testing.T) {
+	state := newServiceState(0, 0)
 	req := httptest.NewRequest(http.MethodPost, "/calc?op1=1&op2=2&operator=add", nil)
 	rec := httptest.NewRecorder()
 
-	calcHandler(rec, req)
+	state.calcHandler(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
 	}
 }
 
+func TestCalcHandlerErrorState(t *testing.T) {
+	state := newServiceState(2, 50*time.Millisecond)
+
+	// A bad-operand call before tripping shouldn't count toward the threshold.
+	badReq := httptest.NewRequest(http.MethodGet, "/calc?op1=abc&op2=2&operator=add", nil)
+	state.calcHandler(httptest.NewRecorder(), badReq)
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/calc?op1=1&op2=1&operator=add", nil)
+		rec := httptest.NewRecorder()
+		state.calcHandler(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("call %d: status = %d, want %d", i+1, rec.Code, http.StatusOK)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/calc?op1=1&op2=1&operator=add", nil)
+	rec := httptest.NewRecorder()
+	state.calcHandler(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+
+	var got errorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !strings.Contains(got.Error, "error state") {
+		t.Errorf("error = %q, want it to mention error state", got.Error)
+	}
+}
+
+func TestHealthzHandlerErrorState(t *testing.T) {
+	state := newServiceState(2, 50*time.Millisecond)
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/calc?op1=1&op2=1&operator=add", nil)
+		state.calcHandler(httptest.NewRecorder(), req)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	state.healthzHandler(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestErrorStateAutoRecovery(t *testing.T) {
+	state := newServiceState(2, 50*time.Millisecond)
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/calc?op1=1&op2=1&operator=add", nil)
+		state.calcHandler(httptest.NewRecorder(), req)
+	}
+
+	trippedReq := httptest.NewRequest(http.MethodGet, "/calc?op1=1&op2=1&operator=add", nil)
+	trippedRec := httptest.NewRecorder()
+	state.calcHandler(trippedRec, trippedReq)
+	if trippedRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status while tripped = %d, want %d", trippedRec.Code, http.StatusServiceUnavailable)
+	}
+
+	time.Sleep(60 * time.Millisecond)
+
+	healthzReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	healthzRec := httptest.NewRecorder()
+	state.healthzHandler(healthzRec, healthzReq)
+	if healthzRec.Code != http.StatusOK {
+		t.Fatalf("healthz status after recovery = %d, want %d", healthzRec.Code, http.StatusOK)
+	}
+
+	// Counter should have reset - one more success shouldn't re-trip.
+	calcReq := httptest.NewRequest(http.MethodGet, "/calc?op1=1&op2=1&operator=add", nil)
+	calcRec := httptest.NewRecorder()
+	state.calcHandler(calcRec, calcReq)
+	if calcRec.Code != http.StatusOK {
+		t.Fatalf("calc status after recovery = %d, want %d", calcRec.Code, http.StatusOK)
+	}
+}
+
+func TestCalcHandlerThresholdDisabled(t *testing.T) {
+	state := newServiceState(0, 50*time.Millisecond)
+
+	for i := 0; i < 10; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/calc?op1=1&op2=1&operator=add", nil)
+		rec := httptest.NewRecorder()
+		state.calcHandler(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("call %d: status = %d, want %d", i+1, rec.Code, http.StatusOK)
+		}
+	}
+}
+
 func TestRunHealthcheckSuccess(t *testing.T) {
+	state := newServiceState(0, 0)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", healthzHandler)
+	mux.HandleFunc("/healthz", state.healthzHandler)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
