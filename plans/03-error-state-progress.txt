@@ -1,0 +1,20 @@
+2026-08-12: Plan approved and written to plans/03-error-state-plan.md.
+Executing step by step; user validates each step before the next begins.
+
+2026-08-12: Step 1 done and validated by user.
+- services/reference-service/main.go: added serviceState (mutex-guarded
+  callThreshold/errorDuration/count/errorUntil), newServiceState,
+  inErrorState (lazy reset on expiry), recordSuccess (counts only 200s,
+  no-op when callThreshold <= 0).
+- healthzHandler/calcHandler converted to methods on *serviceState.
+  calcHandler checks inErrorState as the very first thing (503 before any
+  param validation); recordSuccess is only called on the 200 success path.
+- main() reads CALL_THRESHOLD (default 0) and ERROR_STATE_DURATION_SECONDS
+  (default 120) via plain os.Getenv + fallback, same style as LISTEN_ADDR;
+  builds serviceState; wires /healthz and /calc to its methods.
+- Verified `go build -o ... .` succeeds on main.go alone. `go vet ./...`
+  currently fails because main_test.go still calls the old free-function
+  handlers directly (healthzHandler/calcHandler) - expected, fixed in
+  step 2 next.
+- Paused here per user request. Next: step 2 (main_test.go updates + new
+  error-state tests), only on explicit go-ahead.
