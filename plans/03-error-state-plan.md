@@ -211,14 +211,14 @@ unchecked step.
     successful calls in a loop, confirm never `503`.
   Run `go test ./...` in `services/reference-service`, confirm all pass.
 
-- [ ] **3. `services/reference-service/README.md` — docs.** New
+- [x] **3. `services/reference-service/README.md` — docs.** New
   `## Error-state simulation` section: document `CALL_THRESHOLD` (default
   `0`, disabled) and `ERROR_STATE_DURATION_SECONDS` (default `120`) env
   vars, the counting rule (successful `/calc` calls only, frozen during
   error state), and that both `/calc` and `/healthz` return `503` while
   tripped, auto-recovering after the configured duration.
 
-- [ ] **4. Local verification.** `go build -o reference-service . &&
+- [x] **4. Local verification.** `go build -o reference-service . &&
   CALL_THRESHOLD=3 ERROR_STATE_DURATION_SECONDS=10 ./reference-service`,
   then in another terminal: hit `/calc?op1=1&op2=1&operator=add` four
   times — first three `200`, fourth `503`; `curl -i localhost:8080/healthz`
@@ -228,7 +228,7 @@ unchecked step.
   against the container to confirm env vars flow through correctly in the
   distroless runtime.
 
-- [ ] **5. `k6/scripts/reference-service/smoke.js` — configurable run
+- [x] **5. `k6/scripts/reference-service/smoke.js` — configurable run
   duration.** Change `duration: '30s'` (line 8) to `duration: '3m'`, with
   a one-line comment noting it's overridable via k6's built-in
   `K6_DURATION` env var (non-obvious behavior worth flagging since

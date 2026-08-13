@@ -34,3 +34,41 @@ Executing step by step; user validates each step before the next begins.
   completes in ~0.8s, all 12 tests pass (8 existing + 4 new).
 - Paused here per user request. Next: step 3 (README.md docs), only on
   explicit go-ahead.
+
+2026-08-12: Step 3 done and validated by user.
+- services/reference-service/README.md: added new "## Error-state
+  simulation" section (placed before "## Compile and run locally"),
+  documenting CALL_THRESHOLD (default 0, disabled) and
+  ERROR_STATE_DURATION_SECONDS (default 120), the counting rule (only
+  successful /calc calls count, frozen during error state), and that both
+  /calc and /healthz return 503 while tripped, auto-recovering after the
+  configured duration.
+- Paused here per user request. Next: step 4 (local verification - go
+  build + manual curl sequence, then Docker build/run + same sequence
+  against the container), only on explicit go-ahead.
+
+2026-08-12: Step 4 done and validated.
+- Native binary: `go build -o reference-service .`, ran with
+  CALL_THRESHOLD=3 ERROR_STATE_DURATION_SECONDS=10. 4x GET /calc: first 3
+  -> 200, 4th -> 503. GET /healthz while tripped -> 503. Waited 11s,
+  both /healthz and /calc back to 200 (counter reset confirmed - a fresh
+  call succeeded rather than immediately re-tripping).
+- Docker: `docker build -t reference-service:local .` succeeded (two-stage
+  build into distroless). `docker run` with the same two env vars showed
+  identical behavior: 3x 200 then 503 on /calc, 503 on /healthz while
+  tripped, both recovered to 200 after the 10s window. Confirms env vars
+  flow through correctly in the distroless runtime. Container stopped
+  with `docker stop` afterward (the background task's resulting non-zero
+  exit is expected - that's just the process being killed by the stop,
+  not a test failure).
+- Paused here. Next: step 5 (k6/scripts/reference-service/smoke.js -
+  bump duration to 3m with comment on K6_DURATION override), only on
+  explicit go-ahead.
+
+2026-08-12: Step 5 done and validated.
+- k6/scripts/reference-service/smoke.js: options.duration changed from
+  '30s' to '3m' (line 8), with a one-line comment noting it's overridable
+  at runtime via k6's built-in K6_DURATION env var.
+- Paused here. Next: step 6 (terraform/scenarios/reference-service/
+  variables.tf - add call_threshold, error_state_duration_seconds,
+  k6_test_duration variables), only on explicit go-ahead.
