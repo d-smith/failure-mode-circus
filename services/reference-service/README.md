@@ -42,6 +42,27 @@ form: `["CMD", "/reference-service", "healthcheck"]`.
 
 - `LISTEN_ADDR` (optional) — address to listen on. Defaults to `:8080`.
 
+## Error-state simulation
+
+The service can be configured to deliberately fail on demand, to exercise
+downstream failure-mode scenarios:
+
+- `CALL_THRESHOLD` (optional) — number of successful `/calc` calls (`200`
+  responses only; `400`s are free and don't count) before the service
+  enters its error state. Defaults to `0`, which disables the feature
+  entirely — the service always behaves normally unless this is set to a
+  positive number.
+- `ERROR_STATE_DURATION_SECONDS` (optional) — how long the error state
+  lasts once entered, in seconds. Defaults to `120`.
+
+Once `CALL_THRESHOLD` successful `/calc` calls have been made, the service
+enters its error state: both `/calc` and `/healthz` return `503` for
+`ERROR_STATE_DURATION_SECONDS` seconds. The success counter freezes while
+in error state (calls made during this window don't count toward
+anything). After the configured duration elapses, the service
+automatically recovers — the counter resets to `0` and both endpoints
+return to their normal behavior.
+
 ## Compile and run locally
 
 Requires Go 1.26+.

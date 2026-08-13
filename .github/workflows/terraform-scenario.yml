@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: "arn:aws:iam::427848627088:role/failure-mode-circus-terraform-apply"
+      tf-var-overrides:
+        description: "Optional newline-separated KEY=VALUE pairs, exported as TF_VAR_KEY before plan, e.g. for one-off fault-injection runs."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   id-token: write
@@ -51,6 +56,16 @@ jobs:
           terraform_wrapper: false
 
       - run: terraform init -input=false
+
+      - name: Export tf-var-overrides
+        if: inputs.tf-var-overrides != ''
+        env:
+          TF_VAR_OVERRIDES: ${{ inputs.tf-var-overrides }}
+        run: |
+          while IFS='=' read -r key value; do
+            [ -z "$key" ] && continue
+            echo "TF_VAR_${key}=${value}" >> "$GITHUB_ENV"
+          done <<< "$TF_VAR_OVERRIDES"
 
       - run: terraform plan -input=false -out=tfplan
 

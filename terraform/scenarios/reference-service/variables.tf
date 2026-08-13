@@ -55,3 +55,21 @@ variable "desired_count" {
   type        = number
   default     = 1
 }
+
+variable "call_threshold" {
+  description = "Number of successful /calc calls before reference-service enters its error state. 0 disables fault injection."
+  type        = number
+  default     = 0
+}
+
+variable "error_state_duration_seconds" {
+  description = "Seconds reference-service stays in its error state before auto-recovering."
+  type        = number
+  default     = 120
+}
+
+variable "k6_test_duration" {
+  description = "k6 smoke-test run length, e.g. \"3m\". Passed through as K6_DURATION, which k6 natively uses to override the script's exported options.duration."
+  type        = string
+  default     = "3m"
+}

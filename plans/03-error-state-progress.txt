@@ -1,0 +1,160 @@
+2026-08-12: Plan approved and written to plans/03-error-state-plan.md.
+Executing step by step; user validates each step before the next begins.
+
+2026-08-12: Step 1 done and validated by user.
+- services/reference-service/main.go: added serviceState (mutex-guarded
+  callThreshold/errorDuration/count/errorUntil), newServiceState,
+  inErrorState (lazy reset on expiry), recordSuccess (counts only 200s,
+  no-op when callThreshold <= 0).
+- healthzHandler/calcHandler converted to methods on *serviceState.
+  calcHandler checks inErrorState as the very first thing (503 before any
+  param validation); recordSuccess is only called on the 200 success path.
+- main() reads CALL_THRESHOLD (default 0) and ERROR_STATE_DURATION_SECONDS
+  (default 120) via plain os.Getenv + fallback, same style as LISTEN_ADDR;
+  builds serviceState; wires /healthz and /calc to its methods.
+- Verified `go build -o ... .` succeeds on main.go alone. `go vet ./...`
+  currently fails because main_test.go still calls the old free-function
+  handlers directly (healthzHandler/calcHandler) - expected, fixed in
+  step 2 next.
+- Paused here per user request. Next: step 2 (main_test.go updates + new
+  error-state tests), only on explicit go-ahead.
+
+2026-08-12: Step 2 done and validated by user.
+- services/reference-service/main_test.go: existing tests updated to
+  construct state := newServiceState(0, 0) and call state.healthzHandler /
+  state.calcHandler; TestRunHealthcheckSuccess's mux registration updated
+  to state.healthzHandler.
+- New tests added: TestCalcHandlerErrorState, TestHealthzHandlerErrorState,
+  TestErrorStateAutoRecovery, TestCalcHandlerThresholdDisabled.
+- Verified with `go test ./... -v` run from services/reference-service
+  (must cd there first - it's the only go.mod in the repo, no root
+  go.mod/go.work, so running from the repo root causes Go to fall back to
+  legacy path resolution and scan far more than intended, which is what
+  made an earlier run take much longer than expected). Correct invocation
+  completes in ~0.8s, all 12 tests pass (8 existing + 4 new).
+- Paused here per user request. Next: step 3 (README.md docs), only on
+  explicit go-ahead.
+
+2026-08-12: Step 3 done and validated by user.
+- services/reference-service/README.md: added new "## Error-state
+  simulation" section (placed before "## Compile and run locally"),
+  documenting CALL_THRESHOLD (default 0, disabled) and
+  ERROR_STATE_DURATION_SECONDS (default 120), the counting rule (only
+  successful /calc calls count, frozen during error state), and that both
+  /calc and /healthz return 503 while tripped, auto-recovering after the
+  configured duration.
+- Paused here per user request. Next: step 4 (local verification - go
+  build + manual curl sequence, then Docker build/run + same sequence
+  against the container), only on explicit go-ahead.
+
+2026-08-12: Step 4 done and validated.
+- Native binary: `go build -o reference-service .`, ran with
+  CALL_THRESHOLD=3 ERROR_STATE_DURATION_SECONDS=10. 4x GET /calc: first 3
+  -> 200, 4th -> 503. GET /healthz while tripped -> 503. Waited 11s,
+  both /healthz and /calc back to 200 (counter reset confirmed - a fresh
+  call succeeded rather than immediately re-tripping).
+- Docker: `docker build -t reference-service:local .` succeeded (two-stage
+  build into distroless). `docker run` with the same two env vars showed
+  identical behavior: 3x 200 then 503 on /calc, 503 on /healthz while
+  tripped, both recovered to 200 after the 10s window. Confirms env vars
+  flow through correctly in the distroless runtime. Container stopped
+  with `docker stop` afterward (the background task's resulting non-zero
+  exit is expected - that's just the process being killed by the stop,
+  not a test failure).
+- Paused here. Next: step 5 (k6/scripts/reference-service/smoke.js -
+  bump duration to 3m with comment on K6_DURATION override), only on
+  explicit go-ahead.
+
+2026-08-12: Step 5 done and validated.
+- k6/scripts/reference-service/smoke.js: options.duration changed from
+  '30s' to '3m' (line 8), with a one-line comment noting it's overridable
+  at runtime via k6's built-in K6_DURATION env var.
+- Paused here. Next: step 6 (terraform/scenarios/reference-service/
+  variables.tf - add call_threshold, error_state_duration_seconds,
+  k6_test_duration variables), only on explicit go-ahead.
+
+2026-08-12: Step 6 done and validated.
+- terraform/scenarios/reference-service/variables.tf: added
+  call_threshold (number, default 0), error_state_duration_seconds
+  (number, default 120), and k6_test_duration (string, default "3m"),
+  following the existing variable style in the file.
+- Paused here. Next: step 7 (terraform/scenarios/reference-service/
+  service.tf - wire CALL_THRESHOLD/ERROR_STATE_DURATION_SECONDS into the
+  reference-service container's environment block), only on explicit
+  go-ahead.
+
+2026-08-12: Step 7 done and validated.
+- terraform/scenarios/reference-service/service.tf: added an
+  `environment` block to the reference-service container entry, alongside
+  its existing health_check, setting CALL_THRESHOLD and
+  ERROR_STATE_DURATION_SECONDS from the new vars (tostring()'d). Verified
+  the shape against terraform/modules/ecs-service/variables.tf:57-60
+  (optional list(object({ name, value }))) - matches.
+- Paused here. Next: step 8 (terraform/scenarios/reference-service/k6.tf -
+  wire K6_DURATION into the k6-runner container's environment list),
+  only on explicit go-ahead.
+
+2026-08-12: Step 8 done and validated.
+- terraform/scenarios/reference-service/k6.tf: added a K6_DURATION entry
+  (value = var.k6_test_duration) to the k6-runner container's existing
+  environment list, alongside BASE_URL.
+- Paused here. Next: step 9 (.github/workflows/terraform-scenario.yml -
+  add generic tf-var-overrides workflow_dispatch input + a plan-job step
+  exporting it to TF_VAR_* via GITHUB_ENV), only on explicit go-ahead.
+
+2026-08-12: Step 9 done and validated.
+- .github/workflows/terraform-scenario.yml: added `tf-var-overrides`
+  workflow_call input (optional string, default "", newline-separated
+  KEY=VALUE pairs). Added "Export tf-var-overrides" step in the `plan`
+  job only (between `terraform init` and `terraform plan`), gated on
+  `inputs.tf-var-overrides != ''`, reading the input via env:
+  TF_VAR_OVERRIDES (not direct interpolation, to avoid script injection)
+  and appending TF_VAR_<key>=<value> lines to $GITHUB_ENV. `apply` job
+  untouched - it replays the uploaded tfplan artifact and doesn't re-read
+  variables.
+- Paused here. Next: step 10 (new
+  .github/workflows/set-reference-service-fault-config.yml - the
+  standalone toggle workflow), only on explicit go-ahead.
+
+2026-08-12: Step 10 done and validated.
+- New .github/workflows/set-reference-service-fault-config.yml:
+  workflow_dispatch with call_threshold (string, default "0") and
+  error_state_duration_seconds (string, default "120") inputs; calls
+  terraform-scenario.yml with working-directory:
+  terraform/scenarios/reference-service, apply: true, and
+  tf-var-overrides built from both inputs. Terraform-only (no
+  build/deploy/k6 steps), matching the design decision that
+  `terraform apply` alone rolls a fresh ECS deployment via the
+  task-definition ARN reference.
+- Design choice beyond the plan's literal text (flagged to user in-chat,
+  not yet explicitly confirmed): concurrency group set to
+  "scenario-reference-service", shared with scenario-reference-service.yml,
+  since both workflows apply Terraform against the same
+  terraform/scenarios/reference-service state - queues instead of racing
+  if triggered while a normal deploy is in flight.
+- Paused here. Next: step 11 (terraform plan review in
+  terraform/scenarios/reference-service - user runs this per standing
+  preference), only on explicit go-ahead.
+
+2026-08-13: Step 11 done and validated.
+- User had destroyed the whole reference-service scenario's infra at the
+  end of the prior session, so `terraform plan` showed a full recreate
+  (8 to add, 0 to change, 0 to destroy) rather than the additive diff the
+  plan doc originally anticipated. Content confirmed correct regardless:
+  module.reference_service.aws_ecs_task_definition.this's environment
+  includes CALL_THRESHOLD=0 and ERROR_STATE_DURATION_SECONDS=120 (step 7's
+  defaults); module.k6_runner.aws_ecs_task_definition.this's environment
+  includes K6_DURATION=3m alongside the existing BASE_URL (step 8). No
+  destroy/replace anywhere - consistent with everything having already
+  been torn down, nothing left in state to conflict with.
+- User ran plan themselves per standing preference; Claude reviewed the
+  pasted output only, did not execute terraform.
+- Also confirmed in this session: shared concurrency group
+  ("scenario-reference-service") between scenario-reference-service.yml
+  and set-reference-service-fault-config.yml from step 10 is intentional
+  and to be kept - user explicitly confirmed after Claude explained the
+  state-lock/stale-plan race it prevents and the queuing-behind-the-
+  whole-chain tradeoff.
+- Paused here. Next: step 12 (ship the structural changes through the
+  normal pipeline - commit, push, open a PR; user handles all git
+  operations), only on explicit go-ahead.

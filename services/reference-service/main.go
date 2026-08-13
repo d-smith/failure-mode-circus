@@ -8,13 +8,9 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 )
-
-func healthzHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
-}
 
 type calcResponse struct {
 	Op1      float64 `json:"op1"`
@@ -33,7 +29,68 @@ func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	json.NewEncoder(w).Encode(errorResponse{Error: msg})
 }
 
-func calcHandler(w http.ResponseWriter, r *http.Request) {
+// serviceState tracks the error-state fault injection: after callThreshold
+// successful /calc calls, both /calc and /healthz return 503 for
+// errorDuration before auto-recovering.
+type serviceState struct {
+	mu            sync.Mutex
+	callThreshold int
+	errorDuration time.Duration
+	count         int
+	errorUntil    time.Time // zero value = not in error state
+}
+
+func newServiceState(callThreshold int, errorDuration time.Duration) *serviceState {
+	return &serviceState{callThreshold: callThreshold, errorDuration: errorDuration}
+}
+
+// inErrorState reports whether the service is currently in its error
+// state, lazily resetting (exiting error state, counter -> 0) if the
+// configured duration has elapsed since entry.
+func (s *serviceState) inErrorState(now time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.errorUntil.IsZero() {
+		return false
+	}
+	if now.Before(s.errorUntil) {
+		return true
+	}
+	s.errorUntil = time.Time{}
+	s.count = 0
+	return false
+}
+
+// recordSuccess counts one successful /calc call, entering error state
+// once callThreshold is reached. No-op if callThreshold <= 0.
+func (s *serviceState) recordSuccess(now time.Time) {
+	if s.callThreshold <= 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.count++
+	if s.count >= s.callThreshold {
+		s.errorUntil = now.Add(s.errorDuration)
+	}
+}
+
+func (s *serviceState) healthzHandler(w http.ResponseWriter, r *http.Request) {
+	if s.inErrorState(time.Now()) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte("error"))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func (s *serviceState) calcHandler(w http.ResponseWriter, r *http.Request) {
+	if s.inErrorState(time.Now()) {
+		writeJSONError(w, http.StatusServiceUnavailable, "service is in error state")
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -65,6 +122,8 @@ func calcHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "operator must be one of add, sub, mul, div")
 		return
 	}
+
+	s.recordSuccess(time.Now())
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -100,9 +159,23 @@ func main() {
 		os.Exit(runHealthcheck(addr))
 	}
 
+	callThreshold := 0
+	if v := os.Getenv("CALL_THRESHOLD"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			callThreshold = n
+		}
+	}
+	errorDurationSeconds := 120
+	if v := os.Getenv("ERROR_STATE_DURATION_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			errorDurationSeconds = n
+		}
+	}
+	state := newServiceState(callThreshold, time.Duration(errorDurationSeconds)*time.Second)
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", healthzHandler)
-	mux.HandleFunc("/calc", calcHandler)
+	mux.HandleFunc("/healthz", state.healthzHandler)
+	mux.HandleFunc("/calc", state.calcHandler)
 
 	log.Printf("reference-service listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
