@@ -72,3 +72,24 @@ Executing step by step; user validates each step before the next begins.
 - Paused here. Next: step 6 (terraform/scenarios/reference-service/
   variables.tf - add call_threshold, error_state_duration_seconds,
   k6_test_duration variables), only on explicit go-ahead.
+
+2026-08-12: Step 6 done and validated.
+- terraform/scenarios/reference-service/variables.tf: added
+  call_threshold (number, default 0), error_state_duration_seconds
+  (number, default 120), and k6_test_duration (string, default "3m"),
+  following the existing variable style in the file.
+- Paused here. Next: step 7 (terraform/scenarios/reference-service/
+  service.tf - wire CALL_THRESHOLD/ERROR_STATE_DURATION_SECONDS into the
+  reference-service container's environment block), only on explicit
+  go-ahead.
+
+2026-08-12: Step 7 done and validated.
+- terraform/scenarios/reference-service/service.tf: added an
+  `environment` block to the reference-service container entry, alongside
+  its existing health_check, setting CALL_THRESHOLD and
+  ERROR_STATE_DURATION_SECONDS from the new vars (tostring()'d). Verified
+  the shape against terraform/modules/ecs-service/variables.tf:57-60
+  (optional list(object({ name, value }))) - matches.
+- Paused here. Next: step 8 (terraform/scenarios/reference-service/k6.tf -
+  wire K6_DURATION into the k6-runner container's environment list),
+  only on explicit go-ahead.

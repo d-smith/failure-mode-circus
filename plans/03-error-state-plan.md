@@ -234,7 +234,7 @@ unchecked step.
   `K6_DURATION` env var (non-obvious behavior worth flagging since
   nothing in the script itself shows the override happening).
 
-- [ ] **6. `terraform/scenarios/reference-service/variables.tf` — new
+- [x] **6. `terraform/scenarios/reference-service/variables.tf` — new
   variables.** Add, following the existing style (`image_tag`,
   `desired_count`, etc.):
   ```hcl
@@ -257,7 +257,7 @@ unchecked step.
   }
   ```
 
-- [ ] **7. `terraform/scenarios/reference-service/service.tf` — wire
+- [x] **7. `terraform/scenarios/reference-service/service.tf` — wire
   error-state env vars into the container.** On the `reference-service`
   container entry (alongside `health_check`), add:
   ```hcl

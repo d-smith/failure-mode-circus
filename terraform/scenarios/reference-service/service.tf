@@ -27,6 +27,10 @@ module "reference_service" {
       health_check = {
         command = ["CMD", "/reference-service", "healthcheck"]
       }
+      environment = [
+        { name = "CALL_THRESHOLD", value = tostring(var.call_threshold) },
+        { name = "ERROR_STATE_DURATION_SECONDS", value = tostring(var.error_state_duration_seconds) }
+      ]
     }
   ]
 
