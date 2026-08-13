@@ -1,0 +1,42 @@
+name: Set reference-service fault config
+
+# Standalone toggle for reference-service's error-state fault injection
+# (see plans/03-error-state-plan.md). Applies directly on dispatch, no
+# plan-then-approve gate - a human manually triggering CI, same convention
+# as scenario-reference-service.yml's workflow_dispatch escape hatch. Only
+# runs Terraform: changing the container's environment values produces a
+# new task-definition revision, and since aws_ecs_service.this.task_definition
+# references that revision's ARN directly, `terraform apply` alone triggers
+# ECS to roll a fresh deployment - no separate deploy-service.yml run needed.
+on:
+  workflow_dispatch:
+    inputs:
+      call_threshold:
+        description: "Number of successful /calc calls before reference-service enters its error state. 0 disables fault injection."
+        required: false
+        type: string
+        default: "0"
+      error_state_duration_seconds:
+        description: "Seconds reference-service stays in its error state before auto-recovering."
+        required: false
+        type: string
+        default: "120"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: scenario-reference-service
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    name: Terraform apply
+    uses: ./.github/workflows/terraform-scenario.yml
+    with:
+      working-directory: terraform/scenarios/reference-service
+      apply: true
+      tf-var-overrides: |
+        call_threshold=${{ inputs.call_threshold }}
+        error_state_duration_seconds=${{ inputs.error_state_duration_seconds }}

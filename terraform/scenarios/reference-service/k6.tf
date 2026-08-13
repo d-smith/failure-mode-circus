@@ -25,6 +25,10 @@ module "k6_runner" {
         {
           name  = "BASE_URL"
           value = "http://reference-service-direct.internal:8080"
+        },
+        {
+          name  = "K6_DURATION"
+          value = var.k6_test_duration
         }
       ]
     }

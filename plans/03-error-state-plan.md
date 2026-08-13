@@ -270,14 +270,14 @@ unchecked step.
   defaults, so a normal `terraform apply` through the CI/CD pipeline keeps
   fault injection off.
 
-- [ ] **8. `terraform/scenarios/reference-service/k6.tf` — wire
+- [x] **8. `terraform/scenarios/reference-service/k6.tf` — wire
   `K6_DURATION` into the k6-runner container.** Add to the existing
   `environment` list (alongside `BASE_URL`):
   ```hcl
   { name = "K6_DURATION", value = var.k6_test_duration }
   ```
 
-- [ ] **9. `.github/workflows/terraform-scenario.yml` — generic var
+- [x] **9. `.github/workflows/terraform-scenario.yml` — generic var
   override input.** Add one new optional input, kept generic/reusable
   (not reference-service-specific), following the file's existing
   "generic on working-directory" design:
@@ -306,7 +306,7 @@ unchecked step.
   Only the `plan` job needs this — `terraform apply tfplan` replays a
   saved plan and doesn't re-read variables.
 
-- [ ] **10. New `.github/workflows/set-reference-service-fault-config.yml`
+- [x] **10. New `.github/workflows/set-reference-service-fault-config.yml`
   — the standalone toggle workflow.** `workflow_dispatch` with two typed
   inputs, `call_threshold` (default `"0"`) and
   `error_state_duration_seconds` (default `"120"`), calling
@@ -323,7 +323,7 @@ unchecked step.
   decisions) but can still be set via `tf-var-overrides` directly if ever
   needed for a one-off run.
 
-- [ ] **11. `terraform plan` review.** Run `terraform plan` in
+- [x] **11. `terraform plan` review.** Run `terraform plan` in
   `terraform/scenarios/reference-service` (user runs this, per standing
   preference). Expect only an additive task-definition revision on both
   the `reference-service` and `k6-runner` task definitions (new
