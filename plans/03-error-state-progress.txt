@@ -18,3 +18,19 @@ Executing step by step; user validates each step before the next begins.
   step 2 next.
 - Paused here per user request. Next: step 2 (main_test.go updates + new
   error-state tests), only on explicit go-ahead.
+
+2026-08-12: Step 2 done and validated by user.
+- services/reference-service/main_test.go: existing tests updated to
+  construct state := newServiceState(0, 0) and call state.healthzHandler /
+  state.calcHandler; TestRunHealthcheckSuccess's mux registration updated
+  to state.healthzHandler.
+- New tests added: TestCalcHandlerErrorState, TestHealthzHandlerErrorState,
+  TestErrorStateAutoRecovery, TestCalcHandlerThresholdDisabled.
+- Verified with `go test ./... -v` run from services/reference-service
+  (must cd there first - it's the only go.mod in the repo, no root
+  go.mod/go.work, so running from the repo root causes Go to fall back to
+  legacy path resolution and scan far more than intended, which is what
+  made an earlier run take much longer than expected). Correct invocation
+  completes in ~0.8s, all 12 tests pass (8 existing + 4 new).
+- Paused here per user request. Next: step 3 (README.md docs), only on
+  explicit go-ahead.

@@ -189,7 +189,7 @@ unchecked step.
   exactly the desired ECS-container-health interaction called out above).
   Add `"sync"` to imports.
 
-- [ ] **2. `services/reference-service/main_test.go` — update + add
+- [x] **2. `services/reference-service/main_test.go` — update + add
   tests.** Existing tests call `healthzHandler`/`calcHandler` directly as
   free functions (lines 12-127) — update each call site to construct a
   `state := newServiceState(0, 0)` (threshold `0` = disabled, preserves
